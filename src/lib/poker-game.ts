@@ -302,7 +302,7 @@ export class PokerGame {
   botDecision(): { type: string; amount?: number } {
     const p = this.players[this.toAct]
     const toCall = this.currentBet - p.bet
-    const s = strength(p.hole, this.community) + (Math.random() * 0.16 - 0.08)
+    const s = strength(p.hole, this.community) + (Math.random() * 0.12 - 0.06)
     const potOdds = toCall / (this.pot + toCall || 1)
     const L = this.legal()!
     const roundTo = (x: number) => Math.max(BB, Math.round(x / BB) * BB)
@@ -320,14 +320,19 @@ export class PokerGame {
       }
       return { type: 'check' }
     }
-    if (s > 0.8 && this.raisesThisStreet < 4 && p.stack > toCall) {
-      const rr = roundTo(this.currentBet + this.pot * (0.6 + Math.random() * 0.5))
-      const rt = Math.min(rr, L.maxRaiseTo)
-      if (rt >= L.minRaiseTo) return { type: 'raise', amount: rt }
+    // Strong hands (premium holdings) always call, even all-ins
+    if (s > 0.75) {
+      if (s > 0.85 && this.raisesThisStreet < 4 && p.stack > toCall) {
+        const rr = roundTo(this.currentBet + this.pot * (0.6 + Math.random() * 0.5))
+        const rt = Math.min(rr, L.maxRaiseTo)
+        if (rt >= L.minRaiseTo) return { type: 'raise', amount: rt }
+      }
+      return { type: 'call' }
     }
-    const callOk = (s > potOdds + 0.12) || (s > 0.42 && toCall <= p.stack * 0.12)
-    if (callOk) return { type: 'call' }
-    if (s > 0.3 && toCall <= p.stack * 0.06 && Math.random() < 0.5) return { type: 'call' }
+    // Medium hands: call when equity beats pot odds
+    if (s > potOdds + 0.08) return { type: 'call' }
+    // Loose call on cheap bets with decent hand
+    if (s > 0.35 && toCall <= p.stack * 0.15 && Math.random() < 0.45) return { type: 'call' }
     return { type: 'fold' }
   }
 

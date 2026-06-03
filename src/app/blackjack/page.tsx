@@ -107,6 +107,7 @@ export default function BlackjackPage() {
   const [loading, setLoading] = useState(true)
   const [autoDeal, setAutoDeal] = useState(false)
   const [autoCountdown, setAutoCountdown] = useState(0)
+  const [showHelp, setShowHelp] = useState(false)
   const [showBreak, setShowBreak] = useState(false)
   const [breakCountdown, setBreakCountdown] = useState(0)
   const sessionStartBalRef = useRef(0)
@@ -487,6 +488,7 @@ export default function BlackjackPage() {
           <div className="s">DEALER STANDS ON 17 · 3:2</div>
         </div>
         <div className="right">
+          <button className="btn btn-sm btn-ghost" onClick={() => setShowHelp(true)}>How to Play</button>
           <div className="balance">
             <div className="coin">H</div>
             <span className="amt tabnum">{fmt(bal)}</span>
@@ -646,6 +648,31 @@ export default function BlackjackPage() {
               <button className="btn" onClick={() => { navigator.clipboard.writeText(inviteUrl).then(() => showToast('Invite link copied','win')) }}>Copy</button>
             </div>
             <div className="seatnote">Dealer stands on 17 · Blackjack pays 3:2. Your chips carry across every HouseTables table.</div>
+          </div>
+        </div>
+      )}
+
+      {showHelp && (
+        <div className="modal-bg" onClick={() => setShowHelp(false)}>
+          <div className="modal gilt" onClick={e => e.stopPropagation()} style={{maxHeight:'85vh',overflowY:'auto'}}>
+            <button className="x" onClick={() => setShowHelp(false)}>×</button>
+            <h2 className="gold-text">How to Play Blackjack</h2>
+            <div style={{display:'flex',flexDirection:'column',gap:12,color:'var(--cream-dim)',fontSize:14,lineHeight:1.65}}>
+              <p><strong style={{color:'var(--cream)'}}>Objective:</strong> Get a hand total closer to 21 than the dealer without going over (busting).</p>
+              <p><strong style={{color:'var(--cream)'}}>Card Values:</strong> 2–10 = face value, J/Q/K = 10, Ace = 1 or 11 (whichever helps more).</p>
+              <p><strong style={{color:'var(--cream)'}}>Blackjack:</strong> An Ace + any 10-value card on your first two cards pays <strong style={{color:'var(--gold-l)'}}>3:2</strong>.</p>
+              <div>
+                <strong style={{color:'var(--cream)'}}>Your Options:</strong>
+                <ul style={{margin:'8px 0 0 16px',display:'flex',flexDirection:'column',gap:4}}>
+                  <li><strong style={{color:'var(--cream)'}}>Hit</strong> — take another card.</li>
+                  <li><strong style={{color:'var(--cream)'}}>Stand</strong> — keep your current total.</li>
+                  <li><strong style={{color:'var(--cream)'}}>Double Down</strong> — double your bet and receive exactly one more card.</li>
+                  <li><strong style={{color:'var(--cream)'}}>Split</strong> — when dealt a pair, split into two separate hands (doubles your bet).</li>
+                </ul>
+              </div>
+              <p><strong style={{color:'var(--cream)'}}>Dealer Rules:</strong> The dealer must hit until reaching 17 or higher, then must stand.</p>
+              <p><strong style={{color:'var(--cream)'}}>Auto Deal:</strong> Toggle Auto Deal ON to automatically start the next hand using the same bet amount.</p>
+            </div>
           </div>
         </div>
       )}

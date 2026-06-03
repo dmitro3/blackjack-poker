@@ -38,6 +38,7 @@ export default function RoulettePage() {
   const [bal, setBal] = useState(100000)
   const [toast, setToast] = useState<{msg:string,kind:string}|null>(null)
   const [showInvite, setShowInvite] = useState(false)
+  const [showHelp, setShowHelp] = useState(false)
   const [inviteUrl, setInviteUrl] = useState('')
   const [loading, setLoading] = useState(true)
   const wheelRef = useRef<HTMLDivElement>(null)
@@ -176,6 +177,7 @@ export default function RoulettePage() {
           <div className="s">EUROPEAN · SINGLE ZERO</div>
         </div>
         <div className="right">
+          <button className="btn btn-sm btn-ghost" onClick={() => setShowHelp(true)}>How to Play</button>
           <button className="btn btn-sm btn-ghost" onClick={() => setShowInvite(true)}>Invite</button>
           <div className="balance">
             <div className="coin">H</div>
@@ -282,6 +284,32 @@ export default function RoulettePage() {
               <button className="btn" onClick={() => { navigator.clipboard.writeText(inviteUrl).then(() => showToast('Invite link copied','win')) }}>Copy</button>
             </div>
             <div className="seatnote">European single-zero · Your chips carry across every HouseTables table.</div>
+          </div>
+        </div>
+      )}
+
+      {showHelp && (
+        <div className="modal-bg" onClick={() => setShowHelp(false)}>
+          <div className="modal gilt" onClick={e => e.stopPropagation()} style={{maxHeight:'85vh',overflowY:'auto',width:500}}>
+            <button className="x" onClick={() => setShowHelp(false)}>×</button>
+            <h2 className="gold-text">How to Play Roulette</h2>
+            <div style={{display:'flex',flexDirection:'column',gap:12,color:'var(--cream-dim)',fontSize:14,lineHeight:1.65}}>
+              <p><strong style={{color:'var(--cream)'}}>Objective:</strong> Place bets on where the ball will land on the wheel, then spin.</p>
+              <p><strong style={{color:'var(--cream)'}}>Wheel:</strong> European single-zero wheel with 37 pockets (0–36). The 0 is green; 18 pockets are red, 18 are black.</p>
+              <div>
+                <strong style={{color:'var(--cream)'}}>Bet Types &amp; Payouts:</strong>
+                <div style={{display:'flex',flexDirection:'column',gap:6,margin:'10px 0 0 0'}}>
+                  {[['Straight Up (single number)','35:1'],['Red / Black','1:1'],['Odd / Even','1:1'],['Low (1–18) / High (19–36)','1:1'],['Dozens (1–12, 13–24, 25–36)','2:1'],['Columns','2:1']].map(([name,odds]) => (
+                    <div key={name} style={{display:'flex',justifyContent:'space-between',padding:'5px 0',borderBottom:'1px solid rgba(217,182,90,.1)'}}>
+                      <span>{name}</span>
+                      <span style={{fontFamily:'var(--fs-head)',fontWeight:700,color:'var(--gold-l)',marginLeft:16}}>{odds}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <p><strong style={{color:'var(--cream)'}}>How to Bet:</strong> Select a chip size on the left, then click any spot on the board to place that chip. You can stack multiple chips on different spots before spinning.</p>
+              <p><strong style={{color:'var(--cream)'}}>Note:</strong> If the ball lands on 0, only straight-up bets on 0 win. All other bets lose.</p>
+            </div>
           </div>
         </div>
       )}

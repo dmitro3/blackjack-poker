@@ -94,6 +94,7 @@ export default function PokerPage() {
   const gameRef = useRef<PokerGame | null>(null)
   const [snap, setSnap] = useState<GameSnapshot | null>(null)
   const [showInvite, setShowInvite] = useState(false)
+  const [showHelp, setShowHelp] = useState(false)
   const [raiseTo, setRaiseTo] = useState(0)
   const [dealing, setDealing] = useState(false)
   const [bal, setBal] = useState(100000)
@@ -243,6 +244,7 @@ export default function PokerPage() {
           <div className="s">NO-LIMIT · BLINDS 500 / 1,000</div>
         </div>
         <div className="right">
+          <button className="btn btn-sm btn-ghost" onClick={() => setShowHelp(true)}>How to Play</button>
           <button className="btn btn-sm btn-ghost" onClick={() => setShowInvite(true)}>Invite</button>
           <div className="balance">
             <div className="coin">H</div>
@@ -362,6 +364,47 @@ export default function PokerPage() {
               <button className="btn" onClick={() => { navigator.clipboard.writeText(inviteUrl).then(() => showToast('Invite link copied','win')) }}>Copy</button>
             </div>
             <div className="seatnote">Blinds 500 / 1,000 · No-limit · 6 seats. Your chips carry across every HouseTables table.</div>
+          </div>
+        </div>
+      )}
+
+      {showHelp && (
+        <div className="modal-bg" onClick={() => setShowHelp(false)}>
+          <div className="modal gilt" onClick={e => e.stopPropagation()} style={{maxHeight:'85vh',overflowY:'auto',width:520}}>
+            <button className="x" onClick={() => setShowHelp(false)}>×</button>
+            <h2 className="gold-text">How to Play Texas Hold&apos;em</h2>
+            <div style={{display:'flex',flexDirection:'column',gap:12,color:'var(--cream-dim)',fontSize:14,lineHeight:1.65}}>
+              <p><strong style={{color:'var(--cream)'}}>Objective:</strong> Make the best 5-card hand using any combination of your 2 hole cards and 5 community cards.</p>
+              <p><strong style={{color:'var(--cream)'}}>Blinds:</strong> Each hand starts with a Small Blind (500) and Big Blind (1,000) posted by two players. This seeds the pot.</p>
+              <div>
+                <strong style={{color:'var(--cream)'}}>The Streets:</strong>
+                <ul style={{margin:'8px 0 0 16px',display:'flex',flexDirection:'column',gap:4}}>
+                  <li><strong style={{color:'var(--cream)'}}>Preflop</strong> — you receive 2 hole cards; first round of betting.</li>
+                  <li><strong style={{color:'var(--cream)'}}>Flop</strong> — 3 community cards revealed; second betting round.</li>
+                  <li><strong style={{color:'var(--cream)'}}>Turn</strong> — 1 more community card; third betting round.</li>
+                  <li><strong style={{color:'var(--cream)'}}>River</strong> — final community card; last betting round.</li>
+                  <li><strong style={{color:'var(--cream)'}}>Showdown</strong> — remaining players reveal hands; best hand wins.</li>
+                </ul>
+              </div>
+              <div>
+                <strong style={{color:'var(--cream)'}}>Your Actions:</strong>
+                <ul style={{margin:'8px 0 0 16px',display:'flex',flexDirection:'column',gap:4}}>
+                  <li><strong style={{color:'var(--cream)'}}>Fold</strong> — give up your hand (lose any chips already in the pot).</li>
+                  <li><strong style={{color:'var(--cream)'}}>Check</strong> — pass action (only when no bet is facing you).</li>
+                  <li><strong style={{color:'var(--cream)'}}>Call</strong> — match the current bet.</li>
+                  <li><strong style={{color:'var(--cream)'}}>Raise</strong> — increase the bet using the slider.</li>
+                  <li><strong style={{color:'var(--cream)'}}>All-in</strong> — bet all your chips.</li>
+                </ul>
+              </div>
+              <div>
+                <strong style={{color:'var(--cream)'}}>Hand Rankings (best to worst):</strong>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'4px 20px',margin:'8px 0 0 0',fontSize:13}}>
+                  {[['Royal Flush','A K Q J 10 suited'],['Straight Flush','5 in sequence, suited'],['Four of a Kind','4 matching ranks'],['Full House','3 of a kind + pair'],['Flush','5 cards same suit'],['Straight','5 in sequence'],['Three of a Kind','3 matching ranks'],['Two Pair','two pairs'],['Pair','two matching cards'],['High Card','none of the above']].map(([name,desc]) => (
+                    <div key={name}><span style={{color:'var(--gold-l)',fontWeight:600}}>{name}</span><span style={{color:'var(--cream-faint)',fontSize:11,display:'block'}}>{desc}</span></div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

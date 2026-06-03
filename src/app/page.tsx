@@ -184,7 +184,7 @@ function LobbyContent() {
             <span className="gold-text">The House</span><br/>Always Welcomes You
           </h1>
           <p style={{maxWidth:540,margin:'22px auto 0',color:'var(--cream-dim)',fontSize:17,lineHeight:1.6}}>
-            Three tables. Real stakes, no real money. Pull up a chair, stack your chips, and play.
+            Five tables. Real stakes, no real money. Pull up a chair, stack your chips, and play.
           </p>
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:16,margin:'26px auto 0',maxWidth:340}}>
             <hr className="hr-gold" style={{flex:1,border:'none'}} />
@@ -194,7 +194,7 @@ function LobbyContent() {
         </section>
 
         {/* Game cards */}
-        <section style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:24,marginTop:46}}>
+        <section style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:24,marginTop:46,gridAutoRows:'1fr'}}>
           {/* Blackjack */}
           <Link href="/blackjack" style={{
             position:'relative',borderRadius:'var(--radius-lg)',overflow:'hidden',cursor:'pointer',
@@ -290,6 +290,68 @@ function LobbyContent() {
               <h3 style={{fontFamily:'var(--fs-head)',fontWeight:700,fontSize:23,margin:0,letterSpacing:'.04em'}}>Roulette</h3>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:8}}>
                 <span style={{color:'var(--cream-faint)',fontSize:13}}>Rouge, noir, or fortune</span>
+                <span style={{fontFamily:'var(--fs-head)',fontSize:12,letterSpacing:'.14em',color:'var(--gold-l)',textTransform:'uppercase'}}>Take a seat →</span>
+              </div>
+            </div>
+          </Link>
+
+          {/* Slots */}
+          <Link href="/slots" style={{
+            position:'relative',borderRadius:'var(--radius-lg)',overflow:'hidden',cursor:'pointer',
+            textDecoration:'none',color:'inherit',border:'1px solid rgba(217,182,90,.32)',
+            boxShadow:'var(--shadow-pop)',transition:'transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s, border-color .25s',
+            display:'flex',flexDirection:'column',minHeight:340,
+          }} className="game felt">
+            <div style={{flex:1,position:'relative',display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden'}}>
+              <div style={{zIndex:2,display:'flex',gap:10,alignItems:'center'}}>
+                {['🍒','7','♦'].map((s, i) => (
+                  <div key={i} style={{
+                    width:62,height:82,borderRadius:10,
+                    background:'rgba(0,0,0,.6)',border:'1.5px solid rgba(217,182,90,.4)',
+                    display:'flex',alignItems:'center',justifyContent:'center',
+                    fontSize: s==='7'?30:36,
+                    color: s==='7'?'#d9b65a':s==='♦'?'#4fc8f0':'#e73d5c',
+                    fontFamily:'Cinzel,serif',fontWeight:900,
+                  }}>{s}</div>
+                ))}
+              </div>
+              <div style={{position:'absolute',inset:0,background:'radial-gradient(120% 100% at 50% 120%, transparent 40%, rgba(0,0,0,.5))'}}/>
+            </div>
+            <div style={{padding:'20px 24px',background:'linear-gradient(180deg, rgba(19,17,11,.6), var(--ink-900))',borderTop:'1px solid rgba(217,182,90,.25)',position:'relative',zIndex:2}}>
+              <h3 style={{fontFamily:'var(--fs-head)',fontWeight:700,fontSize:23,margin:0,letterSpacing:'.04em'}}>Slots</h3>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:8}}>
+                <span style={{color:'var(--cream-faint)',fontSize:13}}>Classic three-reel, jackpot up to 100×</span>
+                <span style={{fontFamily:'var(--fs-head)',fontSize:12,letterSpacing:'.14em',color:'var(--gold-l)',textTransform:'uppercase'}}>Pull lever →</span>
+              </div>
+            </div>
+          </Link>
+
+          {/* Baccarat */}
+          <Link href="/baccarat" style={{
+            position:'relative',borderRadius:'var(--radius-lg)',overflow:'hidden',cursor:'pointer',
+            textDecoration:'none',color:'inherit',border:'1px solid rgba(217,182,90,.32)',
+            boxShadow:'var(--shadow-pop)',transition:'transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s, border-color .25s',
+            display:'flex',flexDirection:'column',minHeight:340,
+          }} className="game felt">
+            <div style={{flex:1,position:'relative',display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden'}}>
+              <div style={{zIndex:2,display:'flex',gap:-12,position:'relative'}}>
+                {[{r:'K',s:'♠',red:false},{r:'A',s:'♥',red:true},{r:'9',s:'♦',red:true}].map((c,i) => (
+                  <div key={i} style={{
+                    width:62,height:88,borderRadius:8,background:'#f0ece2',
+                    border:'1px solid #ccc',display:'flex',flexDirection:'column',
+                    padding:'6px 8px',marginLeft:i?-18:0,boxShadow:'0 4px 14px rgba(0,0,0,.4)',
+                    color:c.red?'#c4152e':'#1a1a1a',fontFamily:'Cinzel,serif',fontWeight:800,fontSize:16,
+                  }}>
+                    <div>{c.r}</div><div>{c.s}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{position:'absolute',inset:0,background:'radial-gradient(120% 100% at 50% 120%, transparent 40%, rgba(0,0,0,.5))'}}/>
+            </div>
+            <div style={{padding:'20px 24px',background:'linear-gradient(180deg, rgba(19,17,11,.6), var(--ink-900))',borderTop:'1px solid rgba(217,182,90,.25)',position:'relative',zIndex:2}}>
+              <h3 style={{fontFamily:'var(--fs-head)',fontWeight:700,fontSize:23,margin:0,letterSpacing:'.04em'}}>Baccarat</h3>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:8}}>
+                <span style={{color:'var(--cream-faint)',fontSize:13}}>Player, Banker, or Tie</span>
                 <span style={{fontFamily:'var(--fs-head)',fontSize:12,letterSpacing:'.14em',color:'var(--gold-l)',textTransform:'uppercase'}}>Take a seat →</span>
               </div>
             </div>
