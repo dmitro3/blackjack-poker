@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HouseTables — Roulette</title>
+<link rel="stylesheet" href="assets/casino.css" />
+<style>
+  html,body{height:100%;overflow:hidden;}
+  #root{height:100vh;}
+  .table-wrap{height:100vh;display:flex;flex-direction:column;}
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;z-index:30;
+    background:linear-gradient(180deg, rgba(11,10,7,.95), rgba(11,10,7,.2));}
+  .back{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--cream-dim);font-family:var(--fs-head);
+    font-size:13px;letter-spacing:.12em;text-transform:uppercase;padding:9px 16px;border-radius:999px;border:1px solid rgba(217,182,90,.25);transition:.2s;}
+  .back:hover{color:var(--gold-l);border-color:var(--gold);}
+  .title-c{text-align:center;}
+  .title-c .t{font-family:var(--fs-display);font-weight:900;font-size:20px;letter-spacing:.14em;}
+  .title-c .s{font-family:var(--fs-head);font-size:9px;letter-spacing:.4em;color:var(--cream-faint);}
+  .topbar .right{display:flex;align-items:center;gap:12px;}
+
+  /* players at the table */
+  .rseats{width:100%;display:flex;flex-direction:column;gap:8px;}
+  .rseats-h{display:flex;align-items:center;justify-content:space-between;font-family:var(--fs-head);
+    letter-spacing:.18em;font-size:10px;text-transform:uppercase;color:var(--cream-faint);padding:0 2px;}
+  .rs-live{display:inline-flex;align-items:center;gap:6px;color:var(--cream-dim);letter-spacing:.08em;}
+  .rs-dot{width:6px;height:6px;border-radius:50%;background:#3ad07a;box-shadow:0 0 0 0 rgba(58,208,122,.6);animation:pulseLive 2s infinite;}
+  @keyframes pulseLive{0%{box-shadow:0 0 0 0 rgba(58,208,122,.6);}70%{box-shadow:0 0 0 6px rgba(58,208,122,0);}}
+  .rseat-row{display:flex;gap:9px;}
+  .rseat{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 6px;border-radius:12px;position:relative;
+    background:linear-gradient(180deg, rgba(27,24,16,.9), rgba(11,10,7,.92));border:1px solid rgba(217,182,90,.24);}
+  .rseat.you{border-color:rgba(217,182,90,.55);box-shadow:inset 0 0 0 1px rgba(243,221,150,.12);}
+  .rseat.add{cursor:pointer;border-style:dashed;background:rgba(217,182,90,.05);font:inherit;}
+  .rseat.add:hover{background:rgba(217,182,90,.12);border-color:var(--gold);}
+  .rs-av{width:34px;height:34px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;
+    font-family:var(--fs-head);font-weight:800;font-size:15px;color:var(--gold-l);
+    background:linear-gradient(160deg,#3a3327,#221d12);border:1px solid rgba(217,182,90,.4);}
+  .rseat.you .rs-av{background:var(--gold-grad);color:#2a1f08;border:none;}
+  .rs-av.plus{background:transparent;color:var(--gold-l);border:1px dashed rgba(217,182,90,.5);}
+  .rs-nm{font-family:var(--fs-head);font-weight:700;font-size:11px;color:var(--cream);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;}
+  .rs-st{font-size:11px;color:var(--gold-l);font-weight:600;}
+  .rs-delta{position:absolute;top:6px;right:7px;font-family:var(--fs-head);font-weight:700;font-size:10px;}
+  .rs-delta.up{color:#5fd99a;} .rs-delta.down{color:#e7708a;}
+
+  /* invite modal */
+  .modal-bg{position:fixed;inset:0;background:rgba(5,4,2,.72);backdrop-filter:blur(5px);z-index:100;display:flex;align-items:center;justify-content:center;animation:floatUp .2s;}
+  .modal{width:460px;max-width:92vw;padding:32px;border-radius:var(--radius-lg);position:relative;}
+  .modal h2{font-family:var(--fs-head);font-weight:700;font-size:24px;margin:0 0 6px;}
+  .modal p{color:var(--cream-dim);font-size:14px;line-height:1.55;margin:0 0 20px;}
+  .invite-field{display:flex;gap:10px;}
+  .invite-field input{flex:1;background:rgba(0,0,0,.4);border:1px solid rgba(217,182,90,.3);border-radius:10px;padding:0 14px;color:var(--gold-l);font-size:13px;height:46px;}
+  .invite-field input:focus{outline:none;border-color:var(--gold);}
+  .modal .x{position:absolute;top:16px;right:18px;background:none;border:none;color:var(--cream-faint);font-size:24px;cursor:pointer;line-height:1;}
+  .modal .x:hover{color:var(--gold-l);}
+  .roomrow{display:flex;align-items:center;gap:12px;margin-top:16px;padding:11px 16px;border-radius:10px;background:rgba(0,0,0,.35);border:1px dashed rgba(217,182,90,.4);}
+  .roomrow .k{font-size:10px;letter-spacing:.2em;color:var(--cream-faint);text-transform:uppercase;}
+  .roomrow .v{font-family:var(--fs-head);font-weight:700;letter-spacing:.3em;color:var(--gold-l);font-size:19px;}
+  .seatnote{margin-top:18px;font-size:12px;color:var(--cream-faint);line-height:1.5;border-top:1px solid rgba(217,182,90,.15);padding-top:14px;}
+
+  .stage{flex:1;display:grid;grid-template-columns:320px 1fr;gap:22px;padding:0 22px 20px;min-height:0;}
+
+  /* ---- wheel side ---- */
+  .wheel-side{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;}
+  .wheel-housing{position:relative;width:330px;height:330px;}
+  .pointer{position:absolute;top:-6px;left:50%;transform:translateX(-50%);z-index:8;
+    width:0;height:0;border-left:13px solid transparent;border-right:13px solid transparent;border-top:22px solid var(--gold-l);
+    filter:drop-shadow(0 3px 4px rgba(0,0,0,.6));}
+  .wheel-rim{position:absolute;inset:0;border-radius:50%;background:
+    radial-gradient(circle, transparent 58%, #2a1f12 58%);
+    box-shadow:0 20px 50px rgba(0,0,0,.6), inset 0 0 0 7px var(--gold-d), inset 0 0 0 13px #1a130a;}
+  .wheel{position:absolute;inset:13px;border-radius:50%;overflow:hidden;
+    transition:transform 5.4s cubic-bezier(.16,.84,.28,1);will-change:transform;
+    box-shadow:inset 0 0 30px rgba(0,0,0,.7), inset 0 0 0 2px rgba(217,182,90,.35);}
+  .pocket{position:absolute;top:0;left:50%;width:30px;height:50%;transform-origin:bottom center;
+    margin-left:-15px;display:flex;justify-content:center;}
+  .pocket .num{color:#fff;font-family:var(--fs-head);font-weight:700;font-size:12px;
+    width:100%;text-align:center;padding-top:6px;line-height:1;
+    text-shadow:0 1px 2px rgba(0,0,0,.85), 0 0 2px rgba(0,0,0,.6);}
+  .hub{position:absolute;inset:33%;border-radius:50%;background:var(--gold-grad);z-index:6;
+    box-shadow:inset 0 2px 6px rgba(255,255,255,.5), inset 0 -4px 10px var(--gold-deep), 0 4px 12px rgba(0,0,0,.5);
+    display:flex;align-items:center;justify-content:center;}
+  .hub::after{content:"";width:42%;height:42%;border-radius:50%;background:#1a130a;box-shadow:inset 0 2px 4px rgba(0,0,0,.8);}
+  .ball{position:absolute;top:50%;left:50%;width:13px;height:13px;border-radius:50%;z-index:7;
+    background:radial-gradient(circle at 35% 30%, #fff, #c9c2ad 70%);box-shadow:0 2px 5px rgba(0,0,0,.6);
+    transform-origin:0 0;transition:transform 5.4s cubic-bezier(.16,.84,.28,1);}
+
+  .result-disp{display:flex;flex-direction:column;align-items:center;gap:6px;min-height:84px;justify-content:center;}
+  .result-num{width:62px;height:62px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-family:var(--fs-display);font-weight:900;font-size:28px;color:#fff;box-shadow:var(--shadow-pop);border:2px solid rgba(217,182,90,.5);animation:floatUp .4s;}
+  .result-net{font-family:var(--fs-head);font-weight:700;letter-spacing:.05em;font-size:16px;}
+
+  /* ---- board side ---- */
+  .board-side{display:flex;flex-direction:column;justify-content:center;gap:11px;min-width:0;}
+  .board-scroll{overflow-x:auto;padding-bottom:6px;}
+  .board{display:flex;font-family:var(--fs-head);font-weight:700;min-width:500px;}
+  .cell{border:1px solid rgba(217,182,90,.28);display:flex;align-items:center;justify-content:center;
+    cursor:pointer;position:relative;transition:.12s;user-select:none;color:#fff;}
+  .cell:hover{box-shadow:inset 0 0 0 2px var(--gold-l);z-index:3;}
+  .cell.red{background:linear-gradient(160deg,#c4152e,#8f0f22);}
+  .cell.black{background:linear-gradient(160deg,#262626,#111);}
+  .cell.green{background:linear-gradient(160deg,#137a4a,#0c5230);}
+  .zero{width:42px;font-size:20px;border-radius:8px 0 0 8px;}
+  .numbers{display:grid;grid-template-columns:repeat(12,1fr);grid-template-rows:repeat(3,41px);flex:1;}
+  .numbers .cell{font-size:14px;}
+  .colbets{display:grid;grid-template-rows:repeat(3,41px);width:46px;}
+  .colbets .cell{font-size:12px;background:linear-gradient(160deg,#1b1810,#0b0a07);border-radius:0 8px 8px 0;}
+  .lower{margin-left:42px;}
+  .dozens,.outside{display:grid;}
+  .dozens{grid-template-columns:repeat(3,1fr);}
+  .outside{grid-template-columns:repeat(6,1fr);margin-top:0;}
+  .lower .cell{height:38px;font-size:12px;letter-spacing:.06em;background:linear-gradient(160deg,#1b1810,#0b0a07);}
+  .lower .cell.red{background:linear-gradient(160deg,#c4152e,#8f0f22);}
+  .lower .cell.black{background:linear-gradient(160deg,#262626,#111);}
+
+  .placed{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:4;
+    width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-size:10px;color:#fff;font-weight:800;border:2px dashed rgba(255,255,255,.7);
+    box-shadow:0 3px 8px rgba(0,0,0,.5);pointer-events:none;animation:floatUp .25s;}
+  .cell.win-flash{animation:winFlash 1s ease 3;}
+  @keyframes winFlash{0%,100%{box-shadow:inset 0 0 0 2px var(--gold-l);}50%{box-shadow:inset 0 0 0 4px var(--gold-l), 0 0 24px var(--gold);}}
+
+  /* ---- controls ---- */
+  .ctrl{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
+    padding:14px 24px 18px;border-top:1px solid rgba(217,182,90,.18);}
+  .chip-sel{display:flex;gap:10px;align-items:center;}
+  .chip-sel .chip{width:54px;height:54px;font-size:13px;}
+  .chip-sel .chip.sel{outline:3px solid var(--gold-l);outline-offset:2px;transform:translateY(-4px);}
+  .ctrl-right{display:flex;gap:10px;align-items:center;}
+  .total-bet{font-family:var(--fs-head);font-size:14px;color:var(--cream-dim);margin-right:6px;}
+  .total-bet b{color:var(--gold-l);font-size:18px;}
+
+  @media(max-width:900px){
+    .stage{grid-template-columns:1fr;overflow-y:auto;}
+    .wheel-housing{width:260px;height:260px;}
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="assets/bank.js"></script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+const RED = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
+const WHEEL = [0,32,15,19,4,21,2,25,17,34,6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9,22,18,29,7,28,12,35,3,26];
+const SEG = 360/WHEEL.length;
+const CHIPS = [
+  { v:1000, color:'#3a3a3a', label:'1K' },
+  { v:5000, color:'#b3122a', label:'5K' },
+  { v:25000, color:'#137a4a', label:'25K' },
+  { v:100000, color:'#2a2a6e', label:'100K' },
+];
+const colOf = n => n===0?'green':(RED.has(n)?'red':'black');
+
+function App(){
+  const [bets, setBets] = useState({});
+  const [chip, setChip] = useState(5000);
+  const [spinning, setSpinning] = useState(false);
+  const [win, setWin] = useState(null); // {num, net}
+  const [, force] = useState(0);
+  const [showInvite, setShowInvite] = useState(false);
+  const [players, setPlayers] = useState(()=>([
+    { name:'You', avatar:'V', isYou:true },
+    { name:'Marcel', avatar:'M', stack:118000, last:0 },
+    { name:'Bianca', avatar:'B', stack:124500, last:0 },
+    { name:'Odette', avatar:'O', stack:97000, last:0 },
+  ]));
+  const wheelRef = useRef(null), ballRef = useRef(null), rotRef = useRef(0), balRef = useRef(null);
+
+  useEffect(()=>{ if(balRef.current) Bank.mountBalance(balRef.current); },[]);
+
+  const inviteLink = Bank.inviteUrl('Roulette.html');
+  const room = Bank.getRoom();
+
+  const total = Object.values(bets).reduce((a,b)=>a+b,0);
+
+  function place(key){
+    if (spinning) return;
+    if (Bank.getBalance() < chip){ Bank.toast('Not enough chips'); return; }
+    Bank.adjust(-chip);
+    setBets(b=>({ ...b, [key]: (b[key]||0)+chip }));
+    setWin(null);
+  }
+  function clearAll(){
+    if (spinning || total===0) return;
+    Bank.adjust(total); setBets({}); setWin(null);
+  }
+
+  function betWins(key, w){
+    if (key[0]==='n') return parseInt(key.slice(2),10)===w;
+    switch(key){
+      case 'red': return RED.has(w);
+      case 'black': return w!==0 && !RED.has(w);
+      case 'odd': return w!==0 && w%2===1;
+      case 'even': return w!==0 && w%2===0;
+      case 'low': return w>=1 && w<=18;
+      case 'high': return w>=19 && w<=36;
+      case 'dozen-1': return w>=1 && w<=12;
+      case 'dozen-2': return w>=13 && w<=24;
+      case 'dozen-3': return w>=25 && w<=36;
+      case 'col-1': return w!==0 && w%3===1;
+      case 'col-2': return w!==0 && w%3===2;
+      case 'col-3': return w!==0 && w%3===0;
+      default: return false;
+    }
+  }
+  function mult(key){
+    if (key[0]==='n') return 36;
+    if (key.startsWith('dozen')||key.startsWith('col')) return 3;
+    return 2;
+  }
+
+  function spin(){
+    if (spinning || total===0) return;
+    setSpinning(true); setWin(null);
+    const idx = Math.floor(Math.random()*WHEEL.length);
+    const w = WHEEL[idx];
+    // rotate wheel so pocket idx lands at top pointer
+    const target = 360*6 - idx*SEG - rotRef.current%360;
+    rotRef.current += target;
+    if (wheelRef.current) wheelRef.current.style.transform = `rotate(${rotRef.current}deg)`;
+    if (ballRef.current) ballRef.current.style.transform =
+      `rotate(${-360*9 - rotRef.current}deg) translate(0, -132px) rotate(${360*9 + rotRef.current}deg)`;
+    setTimeout(()=>{
+      let winnings = 0;
+      Object.keys(bets).forEach(k=>{ if (betWins(k,w)) winnings += bets[k]*mult(k); });
+      if (winnings>0) Bank.adjust(winnings);
+      const net = winnings - total;
+      setWin({ num:w, net });
+      setSpinning(false);
+      Bank.toast((w===0?'Zero':(colOf(w)==='red'?'Red ':'Black ')+w) + (net>0?'  +'+Bank.fmt(net): net<0?'  −'+Bank.fmt(-total):''), net>0?'win':(net<0?'lose':''));
+      setBets({});
+      // house players at the table react to the spin (cosmetic until backend wired)
+      setPlayers(ps=>ps.map(p=>{
+        if (p.isYou) return p;
+        const stake=[5000,10000,25000][Math.floor(Math.random()*3)];
+        const d = Math.random()<0.46 ? stake*(Math.random()<0.2?2:1) : -stake;
+        return {...p, stack:Math.max(15000,p.stack+d), last:d};
+      }));
+    }, 5500);
+  }
+
+  // colored segments drawn as one precise conic-gradient; numbers centered per wedge
+  const COLORHEX = { green:'#137a4a', red:'#c4152e', black:'#1a1a1a' };
+  const wheelBg = 'conic-gradient(from ' + (-SEG/2).toFixed(4) + 'deg,' +
+    WHEEL.map((n,i)=> COLORHEX[colOf(n)] + ' ' + (i*SEG).toFixed(4) + 'deg ' + ((i+1)*SEG).toFixed(4) + 'deg').join(',') + ')';
+  useEffect(()=>{ if (wheelRef.current) wheelRef.current.style.background = wheelBg; }, [wheelBg]);
+
+  // build wheel pockets once — number sits at the angular centre of its wedge
+  const pockets = WHEEL.map((n,i)=>(
+    <div key={i} className="pocket" style={{transform:`rotate(${i*SEG}deg)`}}>
+      <div className="num">{n}</div>
+    </div>
+  ));
+
+  const numCells = [];
+  for (let n=1;n<=36;n++){
+    const col = Math.ceil(n/3);
+    const row = n%3===0?1:(n%3===2?2:3);
+    numCells.push(
+      <div key={n} className={"cell "+colOf(n)} style={{gridColumn:col,gridRow:row}} onClick={()=>place('n-'+n)}>
+        {n}{bets['n-'+n] && <span className="placed" style={{background:'#2a2a6e'}}>{Bank.fmtShort(bets['n-'+n])}</span>}
+      </div>
+    );
+  }
+
+  const Chip = ({k, bg}) => bets[k] ? <span className="placed" style={{background:bg||'#2a2a6e'}}>{Bank.fmtShort(bets[k])}</span> : null;
+
+  return (
+    <div className="table-wrap">
+      <header className="topbar">
+        <a className="back" href="index.html">← Lobby</a>
+        <div className="title-c"><div className="t gold-text">ROULETTE</div><div className="s">EUROPEAN · SINGLE ZERO</div></div>
+        <div className="right">
+          <button className="btn btn-sm btn-ghost" onClick={()=>setShowInvite(true)}>Invite</button>
+          <div ref={balRef}></div>
+        </div>
+      </header>
+
+      <div className="stage">
+        <div className="wheel-side">
+          <div className="wheel-housing">
+            <div className="pointer"></div>
+            <div className="wheel-rim"></div>
+            <div className="wheel" ref={wheelRef}>{pockets}</div>
+            <div className="hub"></div>
+            <div className="ball" ref={ballRef}></div>
+          </div>
+          <div className="result-disp">
+            {win ? (
+              <>
+                <div className="result-num" style={{background: colOf(win.num)==='red'?'linear-gradient(160deg,#c4152e,#8f0f22)':colOf(win.num)==='green'?'linear-gradient(160deg,#137a4a,#0c5230)':'linear-gradient(160deg,#262626,#111)'}}>{win.num}</div>
+                <div className="result-net" style={{color: win.net>0?'#5fd99a':win.net<0?'#e7708a':'var(--cream-dim)'}}>
+                  {win.net>0?'You win +'+Bank.fmt(win.net): win.net<0?'No luck':'Even money'}
+                </div>
+              </>
+            ) : <div className="result-net muted">{spinning?'No more bets…':'Place your bets'}</div>}
+          </div>
+        </div>
+
+        <div className="board-side">
+          <div className="rseats">
+            <div className="rseats-h">At this table <span className="rs-live"><span className="rs-dot"></span>{players.length} seated · Room {room}</span></div>
+            <div className="rseat-row">
+              {players.map((p,i)=>(
+                <div key={i} className={"rseat"+(p.isYou?' you':'')}>
+                  <div className="rs-av">{p.avatar}</div>
+                  <div className="rs-nm">{p.name}</div>
+                  <div className="rs-st tabnum">{p.isYou? Bank.fmtShort(Bank.getBalance()) : Bank.fmtShort(p.stack)}</div>
+                  {!p.isYou && p.last!==0 && <div className={"rs-delta "+(p.last>0?'up':'down')}>{p.last>0?'+':'−'}{Bank.fmtShort(Math.abs(p.last))}</div>}
+                </div>
+              ))}
+              <button className="rseat add" onClick={()=>setShowInvite(true)} title="Invite a friend">
+                <div className="rs-av plus">+</div>
+                <div className="rs-nm">Invite</div>
+              </button>
+            </div>
+          </div>
+          <div className="board-scroll">
+            <div className="board">
+              <div className={"cell zero green"} onClick={()=>place('n-0')} style={{position:'relative'}}>
+                0<Chip k="n-0" bg="#137a4a" />
+              </div>
+              <div style={{flex:1,display:'flex',flexDirection:'column'}}>
+                <div style={{display:'flex'}}>
+                  <div className="numbers" style={{flex:1}}>{numCells}</div>
+                  <div className="colbets">
+                    {[1,2,3].map(c=>(
+                      <div key={c} className="cell" onClick={()=>place('col-'+c)}>2:1<Chip k={'col-'+c}/></div>
+                    ))}
+                  </div>
+                </div>
+                <div className="lower" style={{marginRight:46}}>
+                  <div className="dozens">
+                    <div className="cell" onClick={()=>place('dozen-1')}>1st 12<Chip k="dozen-1"/></div>
+                    <div className="cell" onClick={()=>place('dozen-2')}>2nd 12<Chip k="dozen-2"/></div>
+                    <div className="cell" onClick={()=>place('dozen-3')}>3rd 12<Chip k="dozen-3"/></div>
+                  </div>
+                  <div className="outside">
+                    <div className="cell" onClick={()=>place('low')}>1–18<Chip k="low"/></div>
+                    <div className="cell" onClick={()=>place('even')}>EVEN<Chip k="even"/></div>
+                    <div className="cell red" onClick={()=>place('red')}>RED<Chip k="red" bg="#8f0f22"/></div>
+                    <div className="cell black" onClick={()=>place('black')}>BLACK<Chip k="black" bg="#000"/></div>
+                    <div className="cell" onClick={()=>place('odd')}>ODD<Chip k="odd"/></div>
+                    <div className="cell" onClick={()=>place('high')}>19–36<Chip k="high"/></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="ctrl">
+            <div className="chip-sel">
+              {CHIPS.map(c=>(
+                <div key={c.v} className={"chip"+(chip===c.v?' sel':'')} style={{background:c.color}} onClick={()=>setChip(c.v)}><span>{c.label}</span></div>
+              ))}
+            </div>
+            <div className="ctrl-right">
+              <span className="total-bet">In play <b className="tabnum">{Bank.fmt(total)}</b></span>
+              <button className="btn btn-ghost btn-sm" onClick={clearAll} disabled={spinning||total===0}>Clear</button>
+              <button className="btn" onClick={spin} disabled={spinning||total===0}>Spin</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {showInvite && (
+        <div className="modal-bg" onClick={()=>setShowInvite(false)}>
+          <div className="modal gilt" onClick={e=>e.stopPropagation()}>
+            <button className="x" onClick={()=>setShowInvite(false)}>×</button>
+            <h2 className="gold-text">Invite to the wheel</h2>
+            <p>Share this link and friends pull up a chair at your roulette table. The seats fill with house regulars until your guests arrive — wire the room code to your backend to seat real players.</p>
+            <div className="invite-field">
+              <input readOnly value={inviteLink} />
+              <button className="btn" onClick={()=>{navigator.clipboard.writeText(inviteLink).then(()=>Bank.toast('Invite link copied','win'));}}>Copy</button>
+            </div>
+            <div className="roomrow">
+              <span className="k">Room</span>
+              <span className="v">{room}</span>
+              <button className="btn btn-sm btn-ghost" style={{marginLeft:'auto'}} onClick={()=>{localStorage.setItem('gilded_room_v1',Bank.makeCode());setShowInvite(false);setTimeout(()=>setShowInvite(true),60);}}>New room</button>
+            </div>
+            <div className="seatnote">European single-zero · Up to 6 at the table. Your chips carry across every HouseTables table.</div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
