@@ -41,6 +41,9 @@ export async function proxy(request: NextRequest) {
   if (!user) {
     const loginUrl = new URL('/login', request.url)
     loginUrl.searchParams.set('next', pathname)
+    // Preserve invite code through the auth flow
+    const invite = request.nextUrl.searchParams.get('invite')
+    if (invite) loginUrl.searchParams.set('invite', invite)
     return NextResponse.redirect(loginUrl)
   }
 
