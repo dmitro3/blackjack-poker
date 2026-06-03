@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HouseTables — Blackjack</title>
+<link rel="stylesheet" href="assets/casino.css" />
+<style>
+  html,body{height:100%;overflow:hidden;}
+  #root{height:100vh;}
+  .table-wrap{height:100vh;display:flex;flex-direction:column;}
+
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;z-index:30;
+    background:linear-gradient(180deg, rgba(11,10,7,.95), rgba(11,10,7,.2));}
+  .back{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--cream-dim);font-family:var(--fs-head);
+    font-size:13px;letter-spacing:.12em;text-transform:uppercase;padding:9px 16px;border-radius:999px;border:1px solid rgba(217,182,90,.25);transition:.2s;}
+  .back:hover{color:var(--gold-l);border-color:var(--gold);}
+  .title-c{text-align:center;}
+  .title-c .t{font-family:var(--fs-display);font-weight:900;font-size:20px;letter-spacing:.14em;}
+  .title-c .s{font-family:var(--fs-head);font-size:9px;letter-spacing:.4em;color:var(--cream-faint);}
+  .topbar .right{display:flex;align-items:center;gap:12px;}
+  .seat-cluster{display:flex;align-items:center;}
+  .seat-cluster .sc-av{width:32px;height:32px;border-radius:50%;margin-left:-8px;display:flex;align-items:center;justify-content:center;
+    font-family:var(--fs-head);font-weight:800;font-size:13px;color:var(--gold-l);
+    background:linear-gradient(160deg,#3a3327,#221d12);border:1.5px solid var(--ink-800);box-shadow:0 0 0 1px rgba(217,182,90,.4);}
+  .seat-cluster .sc-av:first-child{margin-left:0;}
+  .seat-cluster .sc-av.you{background:var(--gold-grad);color:#2a1f08;box-shadow:0 0 0 1px rgba(217,182,90,.6);}
+  .seat-cluster .sc-av.add{cursor:pointer;background:rgba(217,182,90,.08);border:1.5px dashed rgba(217,182,90,.5);color:var(--gold-l);font-size:16px;}
+  .seat-cluster .sc-av.add:hover{background:rgba(217,182,90,.2);}
+
+  /* invite modal */
+  .modal-bg{position:fixed;inset:0;background:rgba(5,4,2,.72);backdrop-filter:blur(5px);z-index:100;display:flex;align-items:center;justify-content:center;animation:floatUp .2s;}
+  .modal{width:460px;max-width:92vw;padding:32px;border-radius:var(--radius-lg);position:relative;}
+  .modal h2{font-family:var(--fs-head);font-weight:700;font-size:24px;margin:0 0 6px;}
+  .modal p{color:var(--cream-dim);font-size:14px;line-height:1.55;margin:0 0 20px;}
+  .invite-field{display:flex;gap:10px;}
+  .invite-field input{flex:1;background:rgba(0,0,0,.4);border:1px solid rgba(217,182,90,.3);border-radius:10px;padding:0 14px;color:var(--gold-l);font-size:13px;height:46px;}
+  .invite-field input:focus{outline:none;border-color:var(--gold);}
+  .modal .x{position:absolute;top:16px;right:18px;background:none;border:none;color:var(--cream-faint);font-size:24px;cursor:pointer;line-height:1;}
+  .modal .x:hover{color:var(--gold-l);}
+  .roomrow{display:flex;align-items:center;gap:12px;margin-top:16px;padding:11px 16px;border-radius:10px;background:rgba(0,0,0,.35);border:1px dashed rgba(217,182,90,.4);}
+  .roomrow .k{font-size:10px;letter-spacing:.2em;color:var(--cream-faint);text-transform:uppercase;}
+  .roomrow .v{font-family:var(--fs-head);font-weight:700;letter-spacing:.3em;color:var(--gold-l);font-size:19px;}
+  .seatnote{margin-top:18px;font-size:12px;color:var(--cream-faint);line-height:1.5;border-top:1px solid rgba(217,182,90,.15);padding-top:14px;}
+
+  /* table */
+  .felt-area{flex:1;position:relative;margin:0 18px 18px;border-radius:30px;overflow:hidden;
+    border:1px solid rgba(217,182,90,.3);box-shadow:var(--shadow-pop);display:flex;flex-direction:column;}
+  .felt-area::after{content:"";position:absolute;inset:14px;border:2px solid rgba(217,182,90,.16);border-radius:22px;pointer-events:none;}
+  .arc-label{position:absolute;top:38%;left:50%;transform:translateX(-50%);text-align:center;
+    font-family:var(--fs-head);color:rgba(244,236,216,.16);letter-spacing:.34em;font-size:15px;text-transform:uppercase;pointer-events:none;}
+  .arc-label .pay{font-size:12px;letter-spacing:.2em;margin-top:5px;color:rgba(217,182,90,.28);}
+
+  /* shoe */
+  .shoe{position:absolute;top:20px;right:34px;width:78px;height:54px;border-radius:8px;
+    background:linear-gradient(180deg,#2a1f12,#140e08);border:1px solid rgba(217,182,90,.35);
+    box-shadow:0 8px 20px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;}
+  .shoe::before{content:"";width:46px;height:40px;border-radius:5px;
+    background:repeating-linear-gradient(45deg,#7a1020 0 5px,#5e0c19 5px 10px);box-shadow:inset 0 0 0 2px var(--gold-d);}
+
+  .zone{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;z-index:2;}
+  .zone.dealer{justify-content:flex-start;padding-top:34px;}
+  .zone.player{justify-content:flex-end;padding-bottom:14px;}
+  .seat-label{font-family:var(--fs-head);letter-spacing:.3em;font-size:12px;text-transform:uppercase;color:var(--cream-faint);margin-bottom:12px;}
+
+  .hand{display:flex;min-height:118px;align-items:flex-end;padding-left:30px;}
+  .hand .card-slot{margin-left:-30px;animation:dealIn .5s cubic-bezier(.2,.9,.25,1) backwards;}
+  .hand .card-slot:first-child{margin-left:0;}
+  .hand .card{--w:80px;}
+  .hand .card.dealing{}
+
+  .val-badge{display:inline-flex;align-items:center;gap:7px;margin-top:13px;padding:6px 15px;border-radius:999px;
+    background:rgba(0,0,0,.5);border:1px solid rgba(217,182,90,.4);font-family:var(--fs-head);font-weight:700;
+    font-size:16px;color:var(--gold-l);min-height:32px;}
+  .val-badge.bust{border-color:#e7708a;color:#e7708a;}
+  .val-badge.bj{background:var(--gold-grad);color:#2a1f08;border:none;}
+
+  /* center status */
+  .status{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:5;text-align:center;pointer-events:none;}
+  .status .msg{font-family:var(--fs-display);font-weight:900;font-size:34px;letter-spacing:.04em;
+    padding:14px 40px;border-radius:14px;animation:floatUp .4s;}
+  .status .msg.win{background:var(--gold-grad);color:#2a1f08;box-shadow:0 14px 50px rgba(0,0,0,.6);}
+  .status .msg.lose{background:linear-gradient(160deg,#6a1325,#440b18);color:var(--cream);border:1px solid rgba(217,182,90,.4);}
+  .status .msg.push{background:linear-gradient(180deg,#241f15,#0b0a07);color:var(--gold-l);border:1px solid rgba(217,182,90,.4);}
+
+  /* control deck */
+  .deck-ctrl{padding:14px 24px 22px;display:flex;align-items:center;justify-content:center;gap:30px;z-index:20;min-height:118px;}
+  .bet-disp{display:flex;flex-direction:column;align-items:center;gap:8px;min-width:120px;}
+  .bet-circle{width:88px;height:88px;border-radius:50%;border:2px dashed rgba(217,182,90,.5);
+    display:flex;align-items:center;justify-content:center;flex-direction:column;background:radial-gradient(circle,rgba(217,182,90,.08),transparent);}
+  .bet-circle .lbl{font-size:9px;letter-spacing:.2em;color:var(--cream-faint);text-transform:uppercase;}
+  .bet-circle .amt{font-family:var(--fs-head);font-weight:800;font-size:22px;color:var(--gold-l);}
+
+  .chip-tray{display:flex;gap:12px;}
+  .chip-tray .chip{width:64px;height:64px;font-size:15px;}
+  .chip-tray .chip.dis{filter:grayscale(.6) brightness(.55);cursor:not-allowed;pointer-events:none;}
+
+  .actions{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;max-width:380px;}
+  .actions .btn{min-width:104px;}
+
+  .vert{width:1px;align-self:stretch;background:linear-gradient(180deg,transparent,rgba(217,182,90,.3),transparent);}
+
+  .hint{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);font-size:11px;color:var(--cream-faint);letter-spacing:.08em;}
+  @media(max-width:760px){
+    .deck-ctrl{flex-direction:column;gap:16px;}
+    .vert{display:none;}
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="assets/bank.js"></script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+const CHIPS = [
+  { v: 1000,  color:'#3a3a3a', label:'1K' },
+  { v: 5000,  color:'#b3122a', label:'5K' },
+  { v: 25000, color:'#137a4a', label:'25K' },
+  { v: 100000,color:'#2a2a6e', label:'100K' },
+];
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function PlayingCard({ card, faceDown, idx, dealt }){
+  const fromX = -360 - idx*4, fromY = -260;
+  const style = { '--fromX': fromX+'px', '--fromY': fromY+'px', animationDelay: (idx*0.13)+'s' };
+  if (faceDown || !card) return (
+    <div className="card-slot" style={style}><div className="card back"></div></div>
+  );
+  return (
+    <div className="card-slot" style={style}>
+      <div className={"card "+(card.color==='red'?'red':'')}>
+        <div className="pip-tl"><div className="rank">{card.rank}</div><div className="pip-suit">{card.suit}</div></div>
+        <div className="center-suit">{card.suit}</div>
+        <div className="pip-br"><div className="rank">{card.rank}</div><div className="pip-suit">{card.suit}</div></div>
+      </div>
+    </div>
+  );
+}
+
+function ValBadge({ cards, hideHole }){
+  if (!cards.length) return null;
+  const shown = hideHole ? cards.slice(0,1) : cards;
+  const { total, soft } = Bank.handValue(shown);
+  const bust = total > 21;
+  const bj = !hideHole && cards.length===2 && total===21;
+  const cls = 'val-badge' + (bust?' bust':'') + (bj?' bj':'');
+  let text;
+  if (bj) text = '★ Blackjack';
+  else if (hideHole) text = (soft ? (total-10)+' / '+total : ''+total);
+  else text = (soft ? total : total) + (bust?' · Bust':'');
+  return <div className={cls}>{text}</div>;
+}
+
+function App(){
+  const [phase, setPhase] = useState('bet'); // bet | deal | player | dealer | done
+  const [bet, setBet] = useState(0);
+  const [lastBet, setLastBet] = useState(0);
+  const [player, setPlayer] = useState([]);
+  const [dealer, setDealer] = useState([]);
+  const [hideHole, setHideHole] = useState(true);
+  const [result, setResult] = useState(null); // {kind,msg}
+  const [doubled, setDoubled] = useState(false);
+  const [bal, setBal] = useState(Bank.getBalance());
+  const [showInvite, setShowInvite] = useState(false);
+  const players = [
+    { name:'You', avatar:'V', isYou:true },
+    { name:'Marcel', avatar:'M' },
+    { name:'Bianca', avatar:'B' },
+  ];
+  const inviteLink = Bank.inviteUrl('Blackjack.html');
+  const room = Bank.getRoom();
+  const deckRef = useRef([]);
+  const balRef = useRef(null);
+
+  useEffect(()=>{ if(balRef.current) Bank.mountBalance(balRef.current); }, []);
+  useEffect(()=>{ const f=()=>setBal(Bank.getBalance()); window.addEventListener('balancechange',f); return ()=>window.removeEventListener('balancechange',f); },[]);
+
+  function draw(){ if(deckRef.current.length < 12) deckRef.current = Bank.shuffle(Bank.freshDeck()); return deckRef.current.pop(); }
+
+  function addChip(v){
+    if (phase!=='bet') return;
+    if (v > bal - bet) { Bank.toast('Not enough chips for that'); return; }
+    setBet(b=>b+v);
+  }
+  function clearBet(){ if(phase==='bet') setBet(0); }
+
+  async function deal(){
+    if (bet<=0 || phase!=='bet') return;
+    Bank.adjust(-bet);
+    setLastBet(bet);
+    setDoubled(false);
+    setResult(null);
+    setHideHole(true);
+    deckRef.current = (deckRef.current.length<20)? Bank.shuffle(Bank.freshDeck()) : deckRef.current;
+    setPhase('deal');
+    const p=[], d=[];
+    setPlayer([]); setDealer([]);
+    await sleep(60);
+    p.push(draw()); setPlayer([...p]); await sleep(260);
+    d.push(draw()); setDealer([...d]); await sleep(260);
+    p.push(draw()); setPlayer([...p]); await sleep(260);
+    d.push(draw()); setDealer([...d]); await sleep(360);
+
+    const pv = Bank.handValue(p).total, dv = Bank.handValue(d).total;
+    if (pv===21 || dv===21){
+      setHideHole(false);
+      await sleep(500);
+      if (pv===21 && dv===21) finish('push', d, p, bet);
+      else if (pv===21) finish('blackjack', d, p, bet);
+      else finish('lose', d, p, bet, 'Dealer Blackjack');
+      return;
+    }
+    setPhase('player');
+  }
+
+  async function hit(){
+    if (phase!=='player') return;
+    const p=[...player, draw()];
+    setPlayer(p);
+    await sleep(300);
+    const v = Bank.handValue(p).total;
+    if (v>21){ finish('lose', dealer, p, lastBet, 'Bust'); }
+    else if (v===21){ stand(p); }
+  }
+
+  async function doubleDown(){
+    if (phase!=='player' || player.length!==2) return;
+    if (lastBet > bal){ Bank.toast('Not enough to double'); return; }
+    Bank.adjust(-lastBet);
+    setDoubled(true);
+    const stake = lastBet*2;
+    const p=[...player, draw()];
+    setPlayer(p);
+    await sleep(380);
+    const v = Bank.handValue(p).total;
+    if (v>21){ finish('lose', dealer, p, stake, 'Bust'); }
+    else { stand(p, stake); }
+  }
+
+  async function stand(curPlayer, stakeOverride){
+    const p = curPlayer || player;
+    const stake = stakeOverride || (doubled? lastBet*2 : lastBet);
+    setPhase('dealer');
+    setHideHole(true);
+    await sleep(200);
+    setHideHole(false);
+    await sleep(620);
+    let d=[...dealer];
+    while (Bank.handValue(d).total < 17){
+      d.push(draw()); setDealer([...d]); await sleep(560);
+    }
+    const dv = Bank.handValue(d).total, pv = Bank.handValue(p).total;
+    if (dv>21) finish('win', d, p, stake, 'Dealer busts');
+    else if (dv>pv) finish('lose', d, p, stake, 'Dealer wins');
+    else if (dv<pv) finish('win', d, p, stake, 'You win');
+    else finish('push', d, p, stake);
+  }
+
+  function finish(kind, d, p, stake, msgIn){
+    setPhase('done');
+    setHideHole(false);
+    let payout=0, kindUI='lose', msg=msgIn||'';
+    if (kind==='blackjack'){ payout = Math.round(stake*2.5); kindUI='win'; msg='Blackjack! 3:2'; }
+    else if (kind==='win'){ payout = stake*2; kindUI='win'; msg=msgIn||'You win'; }
+    else if (kind==='push'){ payout = stake; kindUI='push'; msg='Push'; }
+    else { payout = 0; kindUI='lose'; msg=msgIn||'Dealer wins'; }
+    if (payout>0) Bank.adjust(payout);
+    const net = payout - stake;
+    setResult({ kind:kindUI, msg, net });
+    Bank.toast(msg + (net>0?'  +'+Bank.fmt(net): net<0?'  −'+Bank.fmt(-net):''), kindUI==='push'?'':kindUI);
+  }
+
+  function newHand(){
+    setPhase('bet'); setPlayer([]); setDealer([]); setResult(null); setHideHole(true); setDoubled(false);
+    setBet(lastBet && lastBet<=Bank.getBalance()? lastBet : 0);
+  }
+
+  const canDouble = phase==='player' && player.length===2 && Bank.getBalance()>=lastBet;
+  const pv = Bank.handValue(player).total;
+
+  return (
+    <div className="table-wrap">
+      <header className="topbar">
+        <a className="back" href="index.html">← Lobby</a>
+        <div className="title-c"><div className="t gold-text">BLACKJACK</div><div className="s">DEALER STANDS ON 17 · 3:2</div></div>
+        <div className="right">
+          <div className="seat-cluster">
+            {players.map((p,i)=>(
+              <div key={i} className={"sc-av"+(p.isYou?' you':'')} title={p.name}>{p.avatar}</div>
+            ))}
+            <button className="sc-av add" onClick={()=>setShowInvite(true)} title="Invite a friend">+</button>
+          </div>
+          <button className="btn btn-sm btn-ghost" onClick={()=>setShowInvite(true)}>Invite</button>
+          <div ref={balRef}></div>
+        </div>
+      </header>
+
+      <div className="felt-area felt">
+        <div className="shoe"></div>
+        <div className="arc-label">Blackjack pays 3 to 2<div className="pay">Insurance not offered</div></div>
+
+        <div className="zone dealer">
+          <div className="seat-label">Dealer</div>
+          <div className="hand">
+            {dealer.map((c,i)=> <PlayingCard key={i} card={c} idx={i} faceDown={hideHole && i===1} />)}
+          </div>
+          {dealer.length>0 && <ValBadge cards={dealer} hideHole={hideHole} />}
+        </div>
+
+        {result && (
+          <div className="status"><div className={"msg "+result.kind}>{result.msg}</div></div>
+        )}
+
+        <div className="zone player">
+          <div className="seat-label">You {doubled && '· Doubled'}</div>
+          <div className="hand">
+            {player.map((c,i)=> <PlayingCard key={i} card={c} idx={i} />)}
+          </div>
+          {player.length>0 && <ValBadge cards={player} hideHole={false} />}
+        </div>
+      </div>
+
+      <div className="deck-ctrl">
+        {(phase==='bet') && (
+          <>
+            <div className="bet-disp">
+              <div className="bet-circle">
+                <span className="lbl">Bet</span>
+                <span className="amt tabnum">{bet?Bank.fmtShort(bet):'—'}</span>
+              </div>
+              {bet>0 && <button className="btn btn-sm btn-ghost" onClick={clearBet}>Clear</button>}
+            </div>
+            <div className="vert"></div>
+            <div className="chip-tray">
+              {CHIPS.map(c=>(
+                <div key={c.v} className={"chip"+((c.v>bal-bet)?' dis':'')} style={{background:c.color}} onClick={()=>addChip(c.v)}>
+                  <span>{c.label}</span>
+                </div>
+              ))}
+            </div>
+            <div className="vert"></div>
+            <div className="actions">
+              <button className="btn" disabled={bet<=0} onClick={deal}>Deal</button>
+            </div>
+          </>
+        )}
+
+        {phase==='player' && (
+          <div className="actions">
+            <button className="btn" onClick={hit}>Hit</button>
+            <button className="btn btn-ghost" onClick={()=>stand()}>Stand</button>
+            {canDouble && <button className="btn btn-ghost" onClick={doubleDown}>Double</button>}
+          </div>
+        )}
+
+        {(phase==='deal' || phase==='dealer') && (
+          <div className="seat-label" style={{margin:0,fontSize:14}}>{phase==='deal'?'Dealing…':'Dealer plays…'}</div>
+        )}
+
+        {phase==='done' && (
+          <div className="actions" style={{flexDirection:'column',alignItems:'center'}}>
+            <button className="btn" onClick={newHand}>Next Hand</button>
+            {Bank.getBalance()<=0 && <button className="btn btn-ghost btn-sm" onClick={()=>{Bank.setBalance(Bank.START);Bank.toast('Topped up','win');}}>Out of chips — Refill</button>}
+          </div>
+        )}
+      </div>
+
+      {showInvite && (
+        <div className="modal-bg" onClick={()=>setShowInvite(false)}>
+          <div className="modal gilt" onClick={e=>e.stopPropagation()}>
+            <button className="x" onClick={()=>setShowInvite(false)}>×</button>
+            <h2 className="gold-text">Invite to your table</h2>
+            <p>Share this link and friends take a seat alongside you against the dealer. Their boxes are held by the house until your guests arrive — wire the room code to your backend to seat real players.</p>
+            <div className="invite-field">
+              <input readOnly value={inviteLink} />
+              <button className="btn" onClick={()=>{navigator.clipboard.writeText(inviteLink).then(()=>Bank.toast('Invite link copied','win'));}}>Copy</button>
+            </div>
+            <div className="roomrow">
+              <span className="k">Room</span>
+              <span className="v">{room}</span>
+              <button className="btn btn-sm btn-ghost" style={{marginLeft:'auto'}} onClick={()=>{localStorage.setItem('gilded_room_v1',Bank.makeCode());setShowInvite(false);setTimeout(()=>setShowInvite(true),60);}}>New room</button>
+            </div>
+            <div className="seatnote">Dealer stands on 17 · Blackjack pays 3:2. Your chips carry across every HouseTables table.</div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

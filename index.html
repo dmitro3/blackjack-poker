@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HouseTables — Private Card Room</title>
+<link rel="stylesheet" href="assets/casino.css" />
+<style>
+  .wrap{max-width:1200px;margin:0 auto;padding:0 28px 80px;}
+
+  /* topbar */
+  .topbar{position:sticky;top:0;z-index:40;display:flex;align-items:center;justify-content:space-between;
+    padding:18px 28px;background:linear-gradient(180deg, rgba(11,10,7,.92), rgba(11,10,7,.4) 70%, transparent);
+    backdrop-filter:blur(8px);}
+  .brand{display:flex;align-items:center;gap:13px;text-decoration:none;}
+  .brand .mark{width:42px;height:42px;border-radius:50%;background:var(--gold-grad);
+    display:flex;align-items:center;justify-content:center;color:#2a1f08;font-family:var(--fs-display);
+    font-weight:900;font-size:22px;box-shadow:inset 0 1px 0 rgba(255,255,255,.6), inset 0 -3px 6px var(--gold-deep), 0 4px 12px rgba(0,0,0,.5);}
+  .brand .name{font-family:var(--fs-display);font-weight:900;font-size:23px;letter-spacing:.14em;}
+  .brand .sub{font-family:var(--fs-head);font-size:9px;letter-spacing:.42em;color:var(--cream-faint);margin-top:2px;}
+  .topbar .right{display:flex;align-items:center;gap:14px;}
+
+  /* hero */
+  .hero{text-align:center;padding:54px 0 30px;position:relative;}
+  .hero .eyebrow{font-family:var(--fs-head);letter-spacing:.5em;font-size:12px;color:var(--gold);text-transform:uppercase;margin-bottom:22px;}
+  .hero h1{font-family:var(--fs-display);font-weight:900;font-size:clamp(48px,8vw,98px);line-height:.96;margin:0;}
+  .hero p{max-width:540px;margin:22px auto 0;color:var(--cream-dim);font-size:17px;line-height:1.6;}
+  .hero .rule{display:flex;align-items:center;justify-content:center;gap:16px;margin:26px auto 0;max-width:340px;}
+  .hero .rule .dot{width:7px;height:7px;border-radius:50%;background:var(--gold);transform:rotate(45deg);}
+
+  /* game grid */
+  .games{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:46px;}
+  .game{position:relative;border-radius:var(--radius-lg);overflow:hidden;cursor:pointer;text-decoration:none;color:inherit;
+    border:1px solid rgba(217,182,90,.32);box-shadow:var(--shadow-pop);
+    transition:transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s, border-color .25s;display:flex;flex-direction:column;min-height:340px;}
+  .game:hover{transform:translateY(-8px);border-color:var(--gold);box-shadow:0 28px 70px rgba(0,0,0,.6), 0 0 0 1px rgba(217,182,90,.4);}
+  .game .stage{flex:1;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+  .game .stage::after{content:"";position:absolute;inset:0;background:radial-gradient(120% 100% at 50% 120%, transparent 40%, rgba(0,0,0,.5));}
+  .game .label{padding:20px 24px;background:linear-gradient(180deg, rgba(19,17,11,.6), var(--ink-900));
+    border-top:1px solid rgba(217,182,90,.25);position:relative;z-index:2;}
+  .game .label h3{font-family:var(--fs-head);font-weight:700;font-size:23px;margin:0;letter-spacing:.04em;}
+  .game .label .meta{display:flex;align-items:center;justify-content:space-between;margin-top:8px;}
+  .game .label .meta .desc{color:var(--cream-faint);font-size:13px;}
+  .game .label .play{font-family:var(--fs-head);font-size:12px;letter-spacing:.14em;color:var(--gold-l);text-transform:uppercase;
+    display:flex;align-items:center;gap:7px;transition:gap .2s;}
+  .game:hover .play{gap:12px;}
+  .badge-live{display:inline-flex;align-items:center;gap:6px;font-size:11px;letter-spacing:.1em;color:var(--cream-dim);
+    text-transform:uppercase;font-family:var(--fs-head);}
+  .badge-live .pulse{width:7px;height:7px;border-radius:50%;background:#3ad07a;box-shadow:0 0 0 0 rgba(58,208,122,.6);animation:pulseLive 2s infinite;}
+  @keyframes pulseLive{0%{box-shadow:0 0 0 0 rgba(58,208,122,.6);}70%{box-shadow:0 0 0 7px rgba(58,208,122,0);}}
+
+  /* mini visuals inside stage */
+  .mini-cards{display:flex;}
+  .mini-cards .card{--w:84px;margin-left:-38px;box-shadow:0 10px 24px rgba(0,0,0,.5);}
+  .mini-cards .card:first-child{margin-left:0;}
+  .mini-chips{position:relative;width:120px;height:120px;}
+  .mini-chips .chip{position:absolute;width:74px;height:74px;}
+
+  /* roulette mini wheel */
+  .mini-wheel{width:150px;height:150px;border-radius:50%;position:relative;
+    background:conic-gradient(from 0deg,
+      #1a1a1a 0 10deg,#b3122a 10deg 20deg,#1a1a1a 20deg 30deg,#137a4a 30deg 40deg,
+      #b3122a 40deg 50deg,#1a1a1a 50deg 60deg,#b3122a 60deg 70deg,#1a1a1a 70deg 80deg,
+      #b3122a 80deg 90deg,#1a1a1a 90deg 100deg,#b3122a 100deg 110deg,#1a1a1a 110deg 120deg,
+      #b3122a 120deg 130deg,#1a1a1a 130deg 140deg,#b3122a 140deg 150deg,#1a1a1a 150deg 160deg,
+      #b3122a 160deg 170deg,#1a1a1a 170deg 180deg,#137a4a 180deg 190deg,#b3122a 190deg 200deg,
+      #1a1a1a 200deg 210deg,#b3122a 210deg 220deg,#1a1a1a 220deg 230deg,#b3122a 230deg 240deg,
+      #1a1a1a 240deg 250deg,#b3122a 250deg 260deg,#1a1a1a 260deg 270deg,#b3122a 270deg 280deg,
+      #1a1a1a 280deg 290deg,#b3122a 290deg 300deg,#1a1a1a 300deg 310deg,#b3122a 310deg 320deg,
+      #1a1a1a 320deg 330deg,#b3122a 330deg 340deg,#1a1a1a 340deg 350deg,#b3122a 350deg 360deg);
+    box-shadow:inset 0 0 0 8px var(--gold-d), inset 0 0 0 11px #2a1f08, 0 12px 30px rgba(0,0,0,.6);
+    animation:spinSlow 14s linear infinite;}
+  .mini-wheel::after{content:"";position:absolute;inset:38px;border-radius:50%;background:var(--gold-grad);
+    box-shadow:inset 0 2px 6px rgba(255,255,255,.5), inset 0 -3px 8px var(--gold-deep);}
+  @keyframes spinSlow{to{transform:rotate(360deg);}}
+
+  /* invite + refill row */
+  .lower{display:grid;grid-template-columns:1.3fr 1fr;gap:24px;margin-top:34px;}
+  .panel{padding:30px;border-radius:var(--radius-lg);}
+  .panel h2{font-family:var(--fs-head);font-weight:700;font-size:22px;margin:0 0 6px;letter-spacing:.03em;}
+  .panel .lead{color:var(--cream-dim);font-size:14px;line-height:1.55;margin:0 0 22px;}
+  .invite-field{display:flex;gap:10px;align-items:stretch;}
+  .invite-field input{flex:1;background:rgba(0,0,0,.4);border:1px solid rgba(217,182,90,.3);border-radius:10px;
+    padding:0 16px;color:var(--gold-l);font-family:'Manrope';font-size:14px;letter-spacing:.02em;height:48px;}
+  .invite-field input:focus{outline:none;border-color:var(--gold);}
+  .code-chip{display:inline-flex;align-items:center;gap:10px;margin-top:18px;padding:10px 16px;border-radius:10px;
+    background:rgba(0,0,0,.35);border:1px dashed rgba(217,182,90,.4);}
+  .code-chip .k{font-size:11px;letter-spacing:.2em;color:var(--cream-faint);text-transform:uppercase;}
+  .code-chip .v{font-family:var(--fs-head);font-weight:700;font-size:20px;letter-spacing:.32em;color:var(--gold-l);}
+  .seats{display:flex;gap:10px;margin-top:22px;}
+  .seat{flex:1;aspect-ratio:1;border-radius:12px;border:1px dashed rgba(217,182,90,.3);display:flex;
+    align-items:center;justify-content:center;flex-direction:column;gap:6px;background:rgba(0,0,0,.25);}
+  .seat .av{width:34px;height:34px;border-radius:50%;background:rgba(217,182,90,.12);border:1px solid rgba(217,182,90,.3);
+    display:flex;align-items:center;justify-content:center;color:var(--cream-faint);font-size:16px;}
+  .seat.you .av{background:var(--gold-grad);color:#2a1f08;border:none;font-weight:800;font-family:var(--fs-head);}
+  .seat small{font-size:10px;letter-spacing:.1em;color:var(--cream-faint);text-transform:uppercase;}
+
+  .refill .big{font-family:var(--fs-display);font-weight:900;font-size:42px;}
+  .stat-row{display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px solid rgba(217,182,90,.14);}
+  .stat-row:last-child{border-bottom:none;}
+  .stat-row .l{color:var(--cream-faint);font-size:13px;}
+  .stat-row .r{font-weight:700;color:var(--cream);font-variant-numeric:tabular-nums;}
+
+  /* floating ambient chips */
+  .amb{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden;}
+  .amb .c{position:absolute;border-radius:50%;opacity:.06;border:6px dashed currentColor;}
+
+  footer{text-align:center;margin-top:60px;color:var(--cream-faint);font-size:12px;letter-spacing:.08em;}
+  footer .hr-gold{max-width:200px;margin:0 auto 20px;}
+
+  @media(max-width:880px){
+    .games{grid-template-columns:1fr;}
+    .lower{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+<div class="amb" id="amb"></div>
+
+<header class="topbar">
+  <a class="brand" href="index.html">
+    <div class="mark">H</div>
+    <div>
+      <div class="name gold-text">HOUSETABLES</div>
+      <div class="sub">PRIVATE CARD ROOM</div>
+    </div>
+  </a>
+  <div class="right">
+    <div id="bal"></div>
+    <button class="btn btn-sm btn-ghost" id="refillBtn">Refill</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <section class="hero">
+    <div class="eyebrow">Members Only · Est. MMXXVI</div>
+    <h1><span class="gold-text">The House</span><br/>Always Welcomes You</h1>
+    <p>Three tables. Real stakes, no real money. Pull up a chair, stack your chips, and invite the table — the dealer’s been waiting.</p>
+    <div class="rule"><div class="hr-gold" style="flex:1"></div><div class="dot"></div><div class="hr-gold" style="flex:1"></div></div>
+  </section>
+
+  <section class="games">
+    <a class="game felt" href="Blackjack.html">
+      <div class="stage">
+        <div class="mini-cards">
+          <div class="card black"><div class="pip-tl"><div class="rank">A</div><div class="pip-suit">♠</div></div><div class="center-suit">♠</div><div class="pip-br"><div class="rank">A</div><div class="pip-suit">♠</div></div></div>
+          <div class="card red"><div class="pip-tl"><div class="rank">K</div><div class="pip-suit">♥</div></div><div class="center-suit">♥</div><div class="pip-br"><div class="rank">K</div><div class="pip-suit">♥</div></div></div>
+        </div>
+      </div>
+      <div class="label">
+        <h3>Blackjack</h3>
+        <div class="meta">
+          <span class="desc">Beat the dealer to 21</span>
+          <span class="play">Take a seat →</span>
+        </div>
+      </div>
+    </a>
+
+    <a class="game felt felt-red" href="Poker.html">
+      <div class="stage">
+        <div class="mini-chips">
+          <div class="chip" style="background:#1a1a1a;top:30px;left:8px;"><span>5K</span></div>
+          <div class="chip" style="background:#b3122a;top:8px;left:32px;"><span>25K</span></div>
+          <div class="chip" style="background:#137a4a;top:38px;left:52px;"><span>10K</span></div>
+        </div>
+      </div>
+      <div class="label">
+        <h3>Texas Hold’em</h3>
+        <div class="meta">
+          <span class="badge-live"><span class="pulse"></span>Invite friends</span>
+          <span class="play">Take a seat →</span>
+        </div>
+      </div>
+    </a>
+
+    <a class="game felt" href="Roulette.html">
+      <div class="stage">
+        <div class="mini-wheel"></div>
+      </div>
+      <div class="label">
+        <h3>Roulette</h3>
+        <div class="meta">
+          <span class="desc">Rouge, noir, or fortune</span>
+          <span class="play">Take a seat →</span>
+        </div>
+      </div>
+    </a>
+  </section>
+
+  <section class="lower">
+    <div class="panel gilt">
+      <h2 class="gold-text">Invite the table</h2>
+      <p class="lead">Share your private room link. When you wire it to your backend, friends who open it drop straight into your seat at any table.</p>
+      <div class="invite-field">
+        <input id="inviteInput" readonly />
+        <button class="btn" id="copyBtn">Copy Link</button>
+      </div>
+      <div class="code-chip">
+        <span class="k">Room Code</span>
+        <span class="v" id="roomCode">——————</span>
+        <button class="btn btn-sm btn-ghost" id="newRoom" style="margin-left:6px;">New</button>
+      </div>
+      <div class="seats">
+        <div class="seat you"><div class="av">V</div><small>You</small></div>
+        <div class="seat"><div class="av">+</div><small>Open</small></div>
+        <div class="seat"><div class="av">+</div><small>Open</small></div>
+        <div class="seat"><div class="av">+</div><small>Open</small></div>
+      </div>
+    </div>
+
+    <div class="panel gilt refill">
+      <h2 class="gold-text">Your Stack</h2>
+      <p class="lead">Saved to this browser between visits.</p>
+      <div class="big gold-text tabnum" id="bigBal">—</div>
+      <div style="margin:18px 0 22px;">
+        <div class="stat-row"><span class="l">Starting bankroll</span><span class="r tabnum" id="startBal">—</span></div>
+        <div class="stat-row"><span class="l">Net since start</span><span class="r tabnum" id="netBal">—</span></div>
+      </div>
+      <button class="btn" id="refillBtn2" style="width:100%;">Top up to 100,000</button>
+    </div>
+  </section>
+
+  <footer>
+    <div class="hr-gold"></div>
+    Play responsibly — these chips hold no cash value. HouseTables is a private game among friends.
+  </footer>
+</div>
+
+<script src="assets/bank.js"></script>
+<script>
+  Bank.mountBalance(document.getElementById('bal'));
+
+  // big balance + stats
+  function renderStack(){
+    var b = Bank.getBalance();
+    document.getElementById('bigBal').textContent = Bank.fmt(b);
+    document.getElementById('startBal').textContent = Bank.fmt(Bank.START);
+    var net = b - Bank.START;
+    var el = document.getElementById('netBal');
+    el.textContent = (net>=0?'+':'−') + Bank.fmt(Math.abs(net));
+    el.style.color = net>=0 ? '#5fd99a' : '#e7708a';
+  }
+  renderStack();
+  window.addEventListener('balancechange', renderStack);
+
+  // invite
+  function renderInvite(){
+    document.getElementById('inviteInput').value = Bank.inviteUrl('Poker.html');
+    document.getElementById('roomCode').textContent = Bank.getRoom();
+  }
+  renderInvite();
+  document.getElementById('copyBtn').addEventListener('click', function(){
+    navigator.clipboard.writeText(Bank.inviteUrl('Poker.html')).then(function(){ Bank.toast('Invite link copied','win'); });
+  });
+  document.getElementById('newRoom').addEventListener('click', function(){
+    localStorage.setItem('gilded_room_v1', Bank.makeCode());
+    renderInvite(); Bank.toast('New room created');
+  });
+
+  // refill
+  function refill(){ if(Bank.getBalance() < Bank.START){ Bank.setBalance(Bank.START); Bank.toast('Topped up to '+Bank.fmt(Bank.START),'win'); } else { Bank.toast('You’re already flush'); } }
+  document.getElementById('refillBtn').addEventListener('click', refill);
+  document.getElementById('refillBtn2').addEventListener('click', refill);
+
+  // ambient chips
+  (function(){
+    var amb = document.getElementById('amb');
+    var cols=['#d9b65a','#b3122a','#137a4a'];
+    for(var i=0;i<8;i++){
+      var c=document.createElement('div'); c.className='c';
+      var s=60+Math.random()*120;
+      c.style.cssText='width:'+s+'px;height:'+s+'px;color:'+cols[i%3]+';left:'+(Math.random()*100)+'%;top:'+(Math.random()*100)+'%;';
+      amb.appendChild(c);
+    }
+  })();
+</script>
+</body>
+</html>
