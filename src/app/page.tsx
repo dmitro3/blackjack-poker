@@ -234,10 +234,10 @@ function LobbyContent() {
             display:'flex',flexDirection:'column',minHeight:340,
           }} className="game felt felt-red">
             <div style={{flex:1,position:'relative',display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden'}}>
-              <div style={{position:'relative',width:120,height:120,zIndex:2}}>
-                <div className="chip" style={{background:'#1a1a1a',position:'absolute',top:30,left:8,width:74,height:74} as React.CSSProperties}><span>5K</span></div>
-                <div className="chip" style={{background:'#b3122a',position:'absolute',top:8,left:32,width:74,height:74} as React.CSSProperties}><span>25K</span></div>
-                <div className="chip" style={{background:'#137a4a',position:'absolute',top:38,left:52,width:74,height:74} as React.CSSProperties}><span>10K</span></div>
+              <div style={{position:'relative',width:180,height:107,zIndex:2}}>
+                <div className="chip" style={{background:'#1a1a1a',position:'absolute',top:45,left:0} as React.CSSProperties}><span>5K</span></div>
+                <div className="chip" style={{background:'#b3122a',position:'absolute',top:8,left:59} as React.CSSProperties}><span>25K</span></div>
+                <div className="chip" style={{background:'#137a4a',position:'absolute',top:45,left:118} as React.CSSProperties}><span>10K</span></div>
               </div>
               <div style={{position:'absolute',inset:0,background:'radial-gradient(120% 100% at 50% 120%, transparent 40%, rgba(0,0,0,.5))'}}/>
             </div>
