@@ -151,7 +151,7 @@ body{
   background:radial-gradient(circle at 50% 50%, rgba(217,182,90,.18), transparent 70%);
 }
 .card.back::before{
-  content:"HT";position:absolute;inset:0;z-index:2;
+  content:"Vedant";position:absolute;inset:0;z-index:2;
   display:flex;align-items:center;justify-content:center;
   font-family:'Cinzel Decorative', serif;font-weight:700;
   font-size:calc(var(--w)*.155);letter-spacing:.04em;
