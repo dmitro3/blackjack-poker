@@ -292,7 +292,7 @@ export default function RoulettePage() {
         .title-c .t { font-family:var(--fs-display);font-weight:900;font-size:20px;letter-spacing:.14em; }
         .title-c .s { font-family:var(--fs-head);font-size:9px;letter-spacing:.4em;color:var(--cream-faint); }
         .topbar .right { display:flex;align-items:center;gap:12px; }
-        .stage { flex:1;display:grid;grid-template-columns:320px 1fr;gap:22px;padding:0 22px 20px;min-height:0; }
+        .stage { flex:1;display:grid;grid-template-columns:320px 1fr;gap:22px;padding:22px 22px 0;min-height:0;margin:0 18px 18px;border-radius:30px;border:1px solid rgba(217,182,90,.3);background:radial-gradient(120% 100% at 50% 0%,#137a4a 0%,#0c5a37 38%,#073b25 100%);box-shadow:inset 0 0 140px rgba(0,0,0,.45),inset 0 2px 0 rgba(255,255,255,.05); }
         .wheel-side { display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px; }
         .wheel-housing { position:relative;width:330px;height:330px; }
         .pointer { position:absolute;top:-6px;left:50%;transform:translateX(-50%);z-index:8;width:0;height:0;border-left:13px solid transparent;border-right:13px solid transparent;border-top:22px solid var(--gold-l);filter:drop-shadow(0 3px 4px rgba(0,0,0,.6)); }

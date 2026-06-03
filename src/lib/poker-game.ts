@@ -267,7 +267,8 @@ export class PokerGame {
     this.lastResult = { winners: [winner.id], pot: this.pot, showdown: false, hands: {} }
     this.street = 'handover'
     this.syncBank()
-    this.message = winner.name + ' wins ' + fmt(this.pot)
+    const verb = winner.isYou ? 'win' : 'wins'
+    this.message = winner.name + ' ' + verb + ' ' + fmt(this.pot)
     return 'win'
   }
 
@@ -292,7 +293,9 @@ export class PokerGame {
     this.street = 'handover'
     this.syncBank()
     const names = winners.map(id => this.players[id].name).join(' & ')
-    this.message = names + ' win'+(winners.length>1?'':'s')+' '+fmt(this.pot)+' · '+hands[winners[0]].name
+    const youWon = winners.length === 1 && winners[0] === 0
+    const verb = (winners.length > 1 || youWon) ? 'win' : 'wins'
+    this.message = names + ' ' + verb + ' ' + fmt(this.pot) + ' · ' + hands[winners[0]].name
     return 'showdown'
   }
 

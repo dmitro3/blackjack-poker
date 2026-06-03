@@ -1,11 +1,10 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
-// Deck helpers
 const SUITS = [
   { s: '♠', c: 'black' }, { s: '♥', c: 'red' },
   { s: '♦', c: 'red' }, { s: '♣', c: 'black' }
@@ -14,6 +13,7 @@ const RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K']
 
 interface Card { rank: string; suit: string; color: string }
 type Phase = 'bet' | 'deal' | 'player' | 'dealer' | 'done'
+interface HandResult { kind: string; msg: string; net: number }
 
 function freshDeck(): Card[] {
   const d: Card[] = []
@@ -48,10 +48,10 @@ function fmtShort(n: number) {
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
 
 const CHIPS = [
-  { v: 1000,  color:'#3a3a3a', label:'1K' },
-  { v: 5000,  color:'#b3122a', label:'5K' },
-  { v: 25000, color:'#137a4a', label:'25K' },
-  { v: 100000,color:'#2a2a6e', label:'100K' },
+  { v: 1000,   color:'#3a3a3a', label:'1K' },
+  { v: 5000,   color:'#b3122a', label:'5K' },
+  { v: 25000,  color:'#137a4a', label:'25K' },
+  { v: 100000, color:'#2a2a6e', label:'100K' },
 ]
 
 function PlayingCard({ card, faceDown, idx }: { card: Card | null; faceDown?: boolean; idx: number }) {
@@ -86,7 +86,7 @@ function ValBadge({ cards, hideHole }: { cards: Card[]; hideHole: boolean }) {
 }
 
 function Toast({ msg, kind, onDone }: { msg: string; kind: string; onDone: () => void }) {
-  useEffect(() => { const t = setTimeout(onDone, 2000); return () => clearTimeout(t) }, [onDone])
+  useEffect(() => { const t = setTimeout(onDone, 2200); return () => clearTimeout(t) }, [onDone])
   const bg = kind==='win' ? 'linear-gradient(160deg,#f3dd96,#d9b65a,#9c7b2e)' : kind==='lose' ? 'linear-gradient(160deg,#6a1325,#440b18)' : 'linear-gradient(180deg,#241f15,#0b0a07)'
   return <div style={{position:'fixed',left:'50%',bottom:38,transform:'translateX(-50%)',zIndex:9999,padding:'13px 26px',borderRadius:999,fontFamily:'Cinzel,serif',fontWeight:600,letterSpacing:'.05em',boxShadow:'0 14px 40px rgba(0,0,0,.5)',border:'1px solid rgba(217,182,90,.5)',background:bg,color:kind==='win'?'#2a1f08':'var(--cream)',animation:'floatUp .35s'}}>{msg}</div>
 }
@@ -98,14 +98,29 @@ export default function BlackjackPage() {
   const [player, setPlayer] = useState<Card[]>([])
   const [dealer, setDealer] = useState<Card[]>([])
   const [hideHole, setHideHole] = useState(true)
-  const [result, setResult] = useState<{kind:string,msg:string,net:number}|null>(null)
+  const [result, setResult] = useState<HandResult|null>(null)
   const [doubled, setDoubled] = useState(false)
   const [bal, setBal] = useState(100000)
   const [toast, setToast] = useState<{msg:string,kind:string}|null>(null)
   const [showInvite, setShowInvite] = useState(false)
   const [inviteUrl, setInviteUrl] = useState('')
   const [loading, setLoading] = useState(true)
+  const [autoDeal, setAutoDeal] = useState(false)
+  const [autoCountdown, setAutoCountdown] = useState(0)
+
+  // Split state
+  const [splitCards, setSplitCards] = useState<Card[]>([])
+  const [splitBet, setSplitBet] = useState(0)
+  const [onSplit, setOnSplit] = useState(false)
+  const [splitResult, setSplitResult] = useState<HandResult|null>(null)
+  const [hand1Cards, setHand1Cards] = useState<Card[]>([])
+  const [hand1Stake, setHand1Stake] = useState(0)
+
+  const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const autoCountRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const deckRef = useRef<Card[]>([])
+  const lastBetRef = useRef(0)
+  const balRef = useRef(bal)
   const router = useRouter()
   const supabase = createClient()
 
@@ -122,6 +137,53 @@ export default function BlackjackPage() {
     }
     init()
   }, [router])
+
+  useEffect(() => { balRef.current = bal }, [bal])
+  useEffect(() => { lastBetRef.current = lastBet }, [lastBet])
+
+  // Auto-deal: when hand ends and autoDeal is on, countdown then re-deal
+  useEffect(() => {
+    if (phase !== 'done' || !autoDeal) return
+    const DELAY = 2500
+    let elapsed = 0
+    setAutoCountdown(DELAY)
+    autoCountRef.current = setInterval(() => {
+      elapsed += 100
+      setAutoCountdown(Math.max(0, DELAY - elapsed))
+    }, 100)
+    autoTimerRef.current = setTimeout(async () => {
+      clearInterval(autoCountRef.current!)
+      setAutoCountdown(0)
+      const betAmt = lastBetRef.current
+      if (betAmt <= 0 || betAmt > balRef.current) return
+      // Reset all state
+      setPlayer([]); setDealer([]); setResult(null); setSplitResult(null)
+      setHideHole(true); setDoubled(false)
+      setSplitCards([]); setSplitBet(0); setOnSplit(false)
+      setHand1Cards([]); setHand1Stake(0)
+      const newBal = balRef.current - betAmt
+      setBal(newBal)
+      setPhase('deal')
+      if (deckRef.current.length < 20) deckRef.current = shuffle(freshDeck())
+      const p: Card[] = [], d: Card[] = []
+      setPlayer([]); setDealer([])
+      await sleep(60)
+      p.push(deckRef.current.pop()!); setPlayer([...p]); await sleep(260)
+      d.push(deckRef.current.pop()!); setDealer([...d]); await sleep(260)
+      p.push(deckRef.current.pop()!); setPlayer([...p]); await sleep(260)
+      d.push(deckRef.current.pop()!); setDealer([...d]); await sleep(360)
+      const pv = handValue(p).total, dv = handValue(d).total
+      if (pv === 21 || dv === 21) {
+        setHideHole(false); await sleep(500)
+        if (pv === 21 && dv === 21) finishSingle('push', d, p, betAmt)
+        else if (pv === 21) finishSingle('blackjack', d, p, betAmt)
+        else finishSingle('lose', d, p, betAmt, 'Dealer Blackjack')
+        return
+      }
+      setPhase('player')
+    }, DELAY)
+    return () => { clearTimeout(autoTimerRef.current!); clearInterval(autoCountRef.current!) }
+  }, [phase, autoDeal])
 
   function showToast(msg: string, kind = '') { setToast({ msg, kind }) }
 
@@ -142,8 +204,10 @@ export default function BlackjackPage() {
     setBal(newBal)
     setLastBet(bet)
     setDoubled(false)
-    setResult(null)
+    setResult(null); setSplitResult(null)
     setHideHole(true)
+    setSplitCards([]); setSplitBet(0); setOnSplit(false)
+    setHand1Cards([]); setHand1Stake(0)
     if (deckRef.current.length < 20) deckRef.current = shuffle(freshDeck())
     setPhase('deal')
     const p: Card[] = [], d: Card[] = []
@@ -156,9 +220,9 @@ export default function BlackjackPage() {
     const pv = handValue(p).total, dv = handValue(d).total
     if (pv === 21 || dv === 21) {
       setHideHole(false); await sleep(500)
-      if (pv === 21 && dv === 21) finish('push', d, p, bet)
-      else if (pv === 21) finish('blackjack', d, p, bet)
-      else finish('lose', d, p, bet, 'Dealer Blackjack')
+      if (pv === 21 && dv === 21) finishSingle('push', d, p, bet)
+      else if (pv === 21) finishSingle('blackjack', d, p, bet)
+      else finishSingle('lose', d, p, bet, 'Dealer Blackjack')
       return
     }
     setPhase('player')
@@ -166,29 +230,97 @@ export default function BlackjackPage() {
 
   async function hit() {
     if (phase !== 'player') return
-    const p = [...player, draw()]
-    setPlayer(p); await sleep(300)
-    const v = handValue(p).total
-    if (v > 21) finish('lose', dealer, p, lastBet, 'Bust')
-    else if (v === 21) doStand(p)
+    if (onSplit) {
+      const s = [...splitCards, draw()]
+      setSplitCards(s); await sleep(300)
+      const v = handValue(s).total
+      if (v > 21) await runDealer(hand1Cards, hand1Stake, s, splitBet)
+      else if (v === 21) await runDealer(hand1Cards, hand1Stake, s, splitBet)
+    } else {
+      const p = [...player, draw()]
+      setPlayer(p); await sleep(300)
+      const v = handValue(p).total
+      if (v > 21) {
+        if (splitCards.length > 0) {
+          setHand1Cards(p); setHand1Stake(doubled ? lastBet*2 : lastBet); setOnSplit(true)
+        } else {
+          finishSingle('lose', dealer, p, doubled ? lastBet*2 : lastBet, 'Bust')
+        }
+      } else if (v === 21) {
+        if (splitCards.length > 0) {
+          setHand1Cards(p); setHand1Stake(doubled ? lastBet*2 : lastBet); setOnSplit(true)
+        } else {
+          doStand(p)
+        }
+      }
+    }
   }
 
   async function doubleDown() {
+    if (phase !== 'player') return
+    if (onSplit) {
+      if (splitCards.length !== 2 || bal < splitBet) return
+      setBal(b => b - splitBet)
+      const newStake = splitBet * 2
+      setSplitBet(newStake)
+      const s = [...splitCards, draw()]
+      setSplitCards(s); await sleep(380)
+      await runDealer(hand1Cards, hand1Stake, s, newStake)
+    } else {
+      if (player.length !== 2 || bal < lastBet) return
+      setBal(b => b - lastBet)
+      setDoubled(true)
+      const stake = lastBet * 2
+      const p = [...player, draw()]
+      setPlayer(p); await sleep(380)
+      const v = handValue(p).total
+      if (v > 21) {
+        if (splitCards.length > 0) {
+          setHand1Cards(p); setHand1Stake(stake); setOnSplit(true)
+        } else {
+          finishSingle('lose', dealer, p, stake, 'Bust')
+        }
+      } else {
+        doStand(p, stake)
+      }
+    }
+  }
+
+  async function doSplit() {
     if (phase !== 'player' || player.length !== 2) return
-    if (lastBet > bal) { showToast('Not enough to double'); return }
+    if (player[0].rank !== player[1].rank) return
+    if (bal < lastBet || splitCards.length > 0) return
     setBal(b => b - lastBet)
-    setDoubled(true)
-    const stake = lastBet * 2
-    const p = [...player, draw()]
-    setPlayer(p); await sleep(380)
-    const v = handValue(p).total
-    if (v > 21) finish('lose', dealer, p, stake, 'Bust')
-    else doStand(p, stake)
+    setSplitBet(lastBet)
+    const c1 = player[0], c2 = player[1]
+    const n1 = draw(), n2 = draw()
+    const newMain = [c1, n1], newSplit = [c2, n2]
+    setPlayer(newMain); setSplitCards(newSplit)
+    await sleep(300)
+    // If main hand hits 21, auto-switch to split
+    if (handValue(newMain).total === 21) {
+      setHand1Cards(newMain); setHand1Stake(lastBet); setOnSplit(true)
+      if (handValue(newSplit).total === 21) {
+        await runDealer(newMain, lastBet, newSplit, lastBet)
+      }
+    }
   }
 
   async function doStand(curPlayer?: Card[], stakeOverride?: number) {
-    const p = curPlayer || player
-    const stake = stakeOverride || (doubled ? lastBet*2 : lastBet)
+    const p = curPlayer || (onSplit ? splitCards : player)
+    const stake = stakeOverride !== undefined ? stakeOverride : (onSplit ? splitBet : (doubled ? lastBet*2 : lastBet))
+    if (!onSplit && splitCards.length > 0) {
+      setHand1Cards(p); setHand1Stake(stake); setOnSplit(true)
+      return
+    }
+    const h1 = onSplit ? hand1Cards : p
+    const s1 = onSplit ? hand1Stake : stake
+    const h2 = onSplit ? p : null
+    const s2 = onSplit ? stake : 0
+    await runDealer(h1, s1, h2, s2)
+  }
+
+  async function runDealer(h1: Card[], s1: number, h2: Card[] | null, s2: number) {
     setPhase('dealer')
     setHideHole(true); await sleep(200)
     setHideHole(false); await sleep(620)
@@ -196,30 +328,64 @@ export default function BlackjackPage() {
     while (handValue(d).total < 17) {
       d.push(draw()); setDealer([...d]); await sleep(560)
     }
-    const dv = handValue(d).total, pv = handValue(p).total
-    if (dv > 21) finish('win', d, p, stake, 'Dealer busts')
-    else if (dv > pv) finish('lose', d, p, stake, 'Dealer wins')
-    else if (dv < pv) finish('win', d, p, stake, 'You win')
-    else finish('push', d, p, stake)
+    const dv = handValue(d).total
+    const pv1 = handValue(h1).total
+
+    let kind1: string, payout1: number
+    if (pv1 > 21)      { kind1 = 'lose'; payout1 = 0 }
+    else if (dv > 21)  { kind1 = 'win';  payout1 = s1 * 2 }
+    else if (pv1 > dv) { kind1 = 'win';  payout1 = s1 * 2 }
+    else if (pv1 < dv) { kind1 = 'lose'; payout1 = 0 }
+    else               { kind1 = 'push'; payout1 = s1 }
+    const net1 = payout1 - s1
+    const msg1 = kind1 === 'win' ? (dv > 21 ? 'Dealer busts' : 'You win') : kind1 === 'push' ? 'Push' : (pv1 > 21 ? 'Bust' : 'Dealer wins')
+
+    let payout2 = 0, net2 = 0, kind2 = '', msg2 = ''
+    if (h2 && h2.length > 0) {
+      const pv2 = handValue(h2).total
+      if (pv2 > 21)      { kind2 = 'lose'; payout2 = 0 }
+      else if (dv > 21)  { kind2 = 'win';  payout2 = s2 * 2 }
+      else if (pv2 > dv) { kind2 = 'win';  payout2 = s2 * 2 }
+      else if (pv2 < dv) { kind2 = 'lose'; payout2 = 0 }
+      else               { kind2 = 'push'; payout2 = s2 }
+      net2 = payout2 - s2
+      msg2 = kind2 === 'win' ? (dv > 21 ? 'Dealer busts' : 'You win') : kind2 === 'push' ? 'Push' : (handValue(h2).total > 21 ? 'Bust' : 'Dealer wins')
+    }
+
+    setBal(b => b + payout1 + payout2)
+    setResult({ kind: kind1, msg: msg1, net: net1 })
+    if (h2 && h2.length > 0) setSplitResult({ kind: kind2, msg: msg2, net: net2 })
+    setPhase('done')
+
+    const totalNet = net1 + net2
+    if (h2 && h2.length > 0) {
+      showToast(`H1: ${msg1}  ·  H2: ${msg2}  ${totalNet > 0 ? '+'+fmt(totalNet) : totalNet < 0 ? '−'+fmt(-totalNet) : ''}`, totalNet > 0 ? 'win' : totalNet < 0 ? 'lose' : '')
+    } else {
+      showToast(msg1 + (net1 > 0 ? '  +'+fmt(net1) : net1 < 0 ? '  −'+fmt(-net1) : ''), kind1 === 'push' ? '' : kind1)
+    }
+    try {
+      await fetch('/api/game/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ game: 'blackjack', chips_wagered: s1 + (h2 ? s2 : 0), chips_won: payout1 + payout2 }),
+      })
+    } catch { /* best effort */ }
   }
 
-  async function finish(kind: string, d: Card[], p: Card[], stake: number, msgIn?: string) {
+  function finishSingle(kind: string, d: Card[], p: Card[], stake: number, msgIn?: string) {
     setPhase('done')
     setHideHole(false)
     let payout = 0, kindUI = 'lose', msg = msgIn || ''
     if (kind === 'blackjack') { payout = Math.round(stake*2.5); kindUI = 'win'; msg = 'Blackjack! 3:2' }
-    else if (kind === 'win') { payout = stake*2; kindUI = 'win'; msg = msgIn || 'You win' }
-    else if (kind === 'push') { payout = stake; kindUI = 'push'; msg = 'Push' }
-    else { payout = 0; kindUI = 'lose'; msg = msgIn || 'Dealer wins' }
-
+    else if (kind === 'win')  { payout = stake*2; kindUI = 'win'; msg = msgIn || 'You win' }
+    else if (kind === 'push') { payout = stake;   kindUI = 'push'; msg = 'Push' }
+    else                      { payout = 0;       kindUI = 'lose'; msg = msgIn || 'Dealer wins' }
     const net = payout - stake
     setBal(b => b + payout)
     setResult({ kind: kindUI, msg, net })
     showToast(msg + (net > 0 ? '  +'+fmt(net) : net < 0 ? '  −'+fmt(-net) : ''), kindUI === 'push' ? '' : kindUI)
-
-    // Log to Supabase
     try {
-      await fetch('/api/game/session', {
+      fetch('/api/game/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ game: 'blackjack', chips_wagered: stake, chips_won: payout }),
@@ -228,7 +394,9 @@ export default function BlackjackPage() {
   }
 
   function newHand() {
-    setPhase('bet'); setPlayer([]); setDealer([]); setResult(null); setHideHole(true); setDoubled(false)
+    setPhase('bet'); setPlayer([]); setDealer([]); setResult(null); setSplitResult(null)
+    setHideHole(true); setDoubled(false)
+    setSplitCards([]); setSplitBet(0); setOnSplit(false); setHand1Cards([]); setHand1Stake(0)
     setBet(lastBet && lastBet <= bal ? lastBet : 0)
   }
 
@@ -238,7 +406,9 @@ export default function BlackjackPage() {
     </div>
   )
 
-  const canDouble = phase === 'player' && player.length === 2 && bal >= lastBet
+  const isSplit = splitCards.length > 0
+  const canDouble = phase === 'player' && (onSplit ? splitCards.length === 2 && bal >= splitBet : player.length === 2 && bal >= lastBet)
+  const canSplit  = phase === 'player' && !onSplit && !isSplit && player.length === 2 && player[0].rank === player[1].rank && bal >= lastBet
 
   return (
     <div className="table-wrap">
@@ -273,18 +443,48 @@ export default function BlackjackPage() {
           {dealer.length > 0 && <ValBadge cards={dealer} hideHole={hideHole} />}
         </div>
 
-        {result && (
+        {/* Result banner — only show for non-split or when split shows inline */}
+        {result && !isSplit && (
           <div className="status">
             <div className={'msg '+result.kind}>{result.msg}</div>
           </div>
         )}
 
         <div className="zone player">
-          <div className="seat-label">You {doubled && '· Doubled'}</div>
-          <div className="hand">
-            {player.map((c, i) => <PlayingCard key={i} card={c} idx={i} />)}
-          </div>
-          {player.length > 0 && <ValBadge cards={player} hideHole={false} />}
+          {isSplit ? (
+            <div className="split-hands">
+              {/* Main hand */}
+              <div className={'split-hand'+(onSplit ? ' dimmed' : ' active')}>
+                <div className="seat-label">Hand 1 {doubled && !onSplit && '· Doubled'}</div>
+                <div className="hand">
+                  {player.map((c, i) => <PlayingCard key={i} card={c} idx={i} />)}
+                </div>
+                {player.length > 0 && <ValBadge cards={player} hideHole={false} />}
+                {phase === 'done' && result && (
+                  <div className={'result-pill '+result.kind}>{result.msg}{result.net !== 0 ? (result.net > 0 ? ' +'+fmt(result.net) : ' −'+fmt(-result.net)) : ''}</div>
+                )}
+              </div>
+              {/* Split hand */}
+              <div className={'split-hand'+(onSplit ? ' active' : ' dimmed')}>
+                <div className="seat-label">Hand 2</div>
+                <div className="hand">
+                  {splitCards.map((c, i) => <PlayingCard key={i} card={c} idx={i} />)}
+                </div>
+                {splitCards.length > 0 && <ValBadge cards={splitCards} hideHole={false} />}
+                {phase === 'done' && splitResult && (
+                  <div className={'result-pill '+splitResult.kind}>{splitResult.msg}{splitResult.net !== 0 ? (splitResult.net > 0 ? ' +'+fmt(splitResult.net) : ' −'+fmt(-splitResult.net)) : ''}</div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="seat-label">You {doubled && '· Doubled'}</div>
+              <div className="hand">
+                {player.map((c, i) => <PlayingCard key={i} card={c} idx={i} />)}
+              </div>
+              {player.length > 0 && <ValBadge cards={player} hideHole={false} />}
+            </>
+          )}
         </div>
       </div>
 
@@ -319,6 +519,7 @@ export default function BlackjackPage() {
             <button className="btn" onClick={hit}>Hit</button>
             <button className="btn btn-ghost" onClick={() => doStand()}>Stand</button>
             {canDouble && <button className="btn btn-ghost" onClick={doubleDown}>Double</button>}
+            {canSplit  && <button className="btn btn-ghost" onClick={doSplit}>Split</button>}
           </div>
         )}
 
@@ -330,7 +531,21 @@ export default function BlackjackPage() {
 
         {phase === 'done' && (
           <div className="actions" style={{flexDirection:'column',alignItems:'center'}}>
-            <button className="btn" onClick={newHand}>Next Hand</button>
+            {autoDeal ? (
+              <>
+                {autoCountdown > 0 && (
+                  <div style={{fontFamily:'var(--fs-head)',fontSize:13,color:'var(--cream-dim)',marginBottom:6}}>
+                    Next hand in {(autoCountdown/1000).toFixed(1)}s…
+                  </div>
+                )}
+                <button className="btn btn-sm btn-ghost" onClick={() => {
+                  clearTimeout(autoTimerRef.current!); clearInterval(autoCountRef.current!)
+                  setAutoCountdown(0); newHand()
+                }}>Deal Now</button>
+              </>
+            ) : (
+              <button className="btn" onClick={newHand}>Next Hand</button>
+            )}
             {bal <= 0 && (
               <button className="btn btn-ghost btn-sm" style={{marginTop:8}} onClick={async () => {
                 const res = await fetch('/api/game/session', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ game:'refill', chips_wagered:0, chips_won:100000 }) })
@@ -341,6 +556,17 @@ export default function BlackjackPage() {
             )}
           </div>
         )}
+
+        {/* Auto Deal toggle — always visible */}
+        <div style={{position:'absolute',right:24,bottom:18}}>
+          <button
+            className={'btn btn-sm'+(autoDeal ? '' : ' btn-ghost')}
+            style={{fontSize:11,padding:'7px 14px'}}
+            onClick={() => setAutoDeal(v => !v)}
+          >
+            Auto Deal {autoDeal ? 'ON' : 'OFF'}
+          </button>
+        </div>
       </div>
 
       {showInvite && (
@@ -348,7 +574,7 @@ export default function BlackjackPage() {
           <div className="modal gilt" onClick={e => e.stopPropagation()}>
             <button className="x" onClick={() => setShowInvite(false)}>×</button>
             <h2 className="gold-text">Invite to your table</h2>
-            <p>Share this link and friends join your game. They&apos;ll get 5,000 bonus chips.</p>
+            <p>Share this link — new players get 5,000 bonus chips when they sign up, and so do you.</p>
             <div className="invite-field">
               <input readOnly value={inviteUrl} />
               <button className="btn" onClick={() => { navigator.clipboard.writeText(inviteUrl).then(() => showToast('Invite link copied','win')) }}>Copy</button>
@@ -360,7 +586,7 @@ export default function BlackjackPage() {
 
       <style>{`
         html, body { height: 100%; overflow: hidden; }
-        .table-wrap { height: 100vh; display: flex; flex-direction: column; }
+        .table-wrap { height: 100vh; display: flex; flex-direction: column; position: relative; }
         .topbar { display:flex;align-items:center;justify-content:space-between;padding:14px 24px;z-index:30;background:linear-gradient(180deg, rgba(11,10,7,.95), rgba(11,10,7,.2)); }
         .back { display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--cream-dim);font-family:var(--fs-head);font-size:13px;letter-spacing:.12em;text-transform:uppercase;padding:9px 16px;border-radius:999px;border:1px solid rgba(217,182,90,.25);transition:.2s; }
         .back:hover { color:var(--gold-l);border-color:var(--gold); }
@@ -387,10 +613,20 @@ export default function BlackjackPage() {
         .val-badge.bj { background:var(--gold-grad);color:#2a1f08;border:none; }
         .status { position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:5;text-align:center;pointer-events:none; }
         .status .msg { font-family:var(--fs-display);font-weight:900;font-size:34px;letter-spacing:.04em;padding:14px 40px;border-radius:14px;animation:floatUp .4s; }
-        .status .msg.win { background:var(--gold-grad);color:#2a1f08;box-shadow:0 14px 50px rgba(0,0,0,.6); }
+        .status .msg.win  { background:var(--gold-grad);color:#2a1f08;box-shadow:0 14px 50px rgba(0,0,0,.6); }
         .status .msg.lose { background:linear-gradient(160deg,#6a1325,#440b18);color:var(--cream);border:1px solid rgba(217,182,90,.4); }
         .status .msg.push { background:linear-gradient(180deg,#241f15,#0b0a07);color:var(--gold-l);border:1px solid rgba(217,182,90,.4); }
-        .deck-ctrl { padding:14px 24px 22px;display:flex;align-items:center;justify-content:center;gap:30px;z-index:20;min-height:118px; }
+        /* Split layout */
+        .split-hands { display:flex;gap:36px;align-items:flex-end;padding-bottom:4px; }
+        .split-hand { display:flex;flex-direction:column;align-items:center;padding:10px 14px;border-radius:18px;border:2px solid transparent;transition:.3s; }
+        .split-hand.active { border-color:rgba(217,182,90,.6);background:rgba(217,182,90,.06); }
+        .split-hand.dimmed { opacity:.55; }
+        .result-pill { margin-top:10px;padding:5px 14px;border-radius:999px;font-family:var(--fs-head);font-weight:700;font-size:13px;letter-spacing:.04em;animation:floatUp .35s; }
+        .result-pill.win  { background:var(--gold-grad);color:#2a1f08; }
+        .result-pill.lose { background:linear-gradient(160deg,#6a1325,#440b18);color:var(--cream);border:1px solid rgba(217,182,90,.3); }
+        .result-pill.push { background:rgba(0,0,0,.5);color:var(--gold-l);border:1px solid rgba(217,182,90,.4); }
+        /* Controls */
+        .deck-ctrl { padding:14px 24px 22px;display:flex;align-items:center;justify-content:center;gap:30px;z-index:20;min-height:118px;position:relative; }
         .bet-disp { display:flex;flex-direction:column;align-items:center;gap:8px;min-width:120px; }
         .bet-circle { width:88px;height:88px;border-radius:50%;border:2px dashed rgba(217,182,90,.5);display:flex;align-items:center;justify-content:center;flex-direction:column;background:radial-gradient(circle,rgba(217,182,90,.08),transparent); }
         .bet-circle .lbl { font-size:9px;letter-spacing:.2em;color:var(--cream-faint);text-transform:uppercase; }
@@ -398,7 +634,7 @@ export default function BlackjackPage() {
         .chip-tray { display:flex;gap:12px; }
         .chip-tray .chip { width:64px;height:64px;font-size:15px; }
         .chip-tray .chip.dis { filter:grayscale(.6) brightness(.55);cursor:not-allowed;pointer-events:none; }
-        .actions { display:flex;gap:12px;flex-wrap:wrap;justify-content:center;max-width:380px; }
+        .actions { display:flex;gap:12px;flex-wrap:wrap;justify-content:center;max-width:420px; }
         .actions .btn { min-width:104px; }
         .vert { width:1px;align-self:stretch;background:linear-gradient(180deg,transparent,rgba(217,182,90,.3),transparent); }
         .modal-bg { position:fixed;inset:0;background:rgba(5,4,2,.72);backdrop-filter:blur(5px);z-index:100;display:flex;align-items:center;justify-content:center;animation:floatUp .2s; }
