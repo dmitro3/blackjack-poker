@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
@@ -41,7 +40,6 @@ export default function AdminPage() {
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null)
   const [countdown, setCountdown] = useState(30)
   const router = useRouter()
-  const supabase = createClient()
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -50,38 +48,29 @@ export default function AdminPage() {
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
     else setRefreshing(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { router.push('/login'); return }
 
-    const [playersRes, settingsRes] = await Promise.all([
-      supabase.from('profiles').select('*').order('created_at', { ascending: false }),
-      supabase.from('admin_settings').select('value').eq('key', 'refill_enabled').single(),
-    ])
+    const res = await fetch('/api/admin/players')
+    if (res.status === 401) { router.push('/login'); return }
+    if (!res.ok) { setRefreshing(false); return }
 
-    if (playersRes.data) setPlayers(playersRes.data)
-    if (settingsRes.data) setRefillEnabled(settingsRes.data.value === 'true')
+    const data = await res.json()
+    setPlayers(data.players)
+    setRefillEnabled(data.refillEnabled)
 
-    // Aggregate game stats from game_sessions
-    const { data: sessions } = await supabase
-      .from('game_sessions')
-      .select('game, chips_wagered, chips_won')
-
-    if (sessions) {
-      const map: Record<string, GameStat> = {}
-      for (const s of sessions) {
-        if (!map[s.game]) map[s.game] = { game: s.game, count: 0, total_wagered: 0, total_won: 0 }
-        map[s.game].count++
-        map[s.game].total_wagered += s.chips_wagered
-        map[s.game].total_won += s.chips_won
-      }
-      setGameStats(Object.values(map).sort((a, b) => b.count - a.count))
+    const map: Record<string, GameStat> = {}
+    for (const s of data.sessions) {
+      if (!map[s.game]) map[s.game] = { game: s.game, count: 0, total_wagered: 0, total_won: 0 }
+      map[s.game].count++
+      map[s.game].total_wagered += s.chips_wagered
+      map[s.game].total_won += s.chips_won
     }
+    setGameStats(Object.values(map).sort((a, b) => b.count - a.count))
 
     setLoading(false)
     setRefreshing(false)
     setLastRefreshed(new Date())
     setCountdown(30)
-  }, [router, supabase])
+  }, [router])
 
   useEffect(() => {
     load()
