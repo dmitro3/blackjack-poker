@@ -107,6 +107,9 @@ export default function BlackjackPage() {
   const [loading, setLoading] = useState(true)
   const [autoDeal, setAutoDeal] = useState(false)
   const [autoCountdown, setAutoCountdown] = useState(0)
+  const [showBreak, setShowBreak] = useState(false)
+  const [breakCountdown, setBreakCountdown] = useState(0)
+  const sessionStartBalRef = useRef(0)
 
   // Split state
   const [splitCards, setSplitCards] = useState<Card[]>([])
@@ -131,7 +134,15 @@ export default function BlackjackPage() {
       const { data: profile } = await supabase.from('profiles').select('chips, invite_code').eq('id', user.id).single()
       if (profile) {
         setBal(profile.chips)
+        sessionStartBalRef.current = profile.chips
         setInviteUrl(`${window.location.origin}/?invite=${profile.invite_code}`)
+        // Check cooldown
+        const cooldownEnd = parseInt(localStorage.getItem('bjCooldownEnd') || '0', 10)
+        if (cooldownEnd > Date.now()) {
+          const remaining = Math.ceil((cooldownEnd - Date.now()) / 1000)
+          setBreakCountdown(remaining)
+          setShowBreak(true)
+        }
       }
       setLoading(false)
     }
@@ -140,6 +151,31 @@ export default function BlackjackPage() {
 
   useEffect(() => { balRef.current = bal }, [bal])
   useEffect(() => { lastBetRef.current = lastBet }, [lastBet])
+
+  // Responsible gambling: detect 10x gain from 50k+ starting balance
+  useEffect(() => {
+    if (phase !== 'done') return
+    const start = sessionStartBalRef.current
+    if (start >= 50000 && bal >= start * 10) {
+      const end = Date.now() + 10 * 60 * 1000
+      localStorage.setItem('bjCooldownEnd', String(end))
+      setBreakCountdown(600)
+      setShowBreak(true)
+      setAutoDeal(false)
+    }
+  }, [phase, bal])
+
+  // Countdown timer for break screen
+  useEffect(() => {
+    if (!showBreak || breakCountdown <= 0) return
+    const t = setInterval(() => {
+      setBreakCountdown(c => {
+        if (c <= 1) { clearInterval(t); return 0 }
+        return c - 1
+      })
+    }, 1000)
+    return () => clearInterval(t)
+  }, [showBreak])
 
   // Auto-deal: when hand ends and autoDeal is on, countdown then re-deal
   useEffect(() => {
@@ -405,6 +441,36 @@ export default function BlackjackPage() {
       <div style={{color:'var(--gold-l)',fontFamily:'var(--fs-head)',letterSpacing:'.1em'}}>Loading…</div>
     </div>
   )
+
+  if (showBreak && breakCountdown > 0) {
+    const mins = Math.floor(breakCountdown / 60)
+    const secs = breakCountdown % 60
+    return (
+      <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',padding:24,background:'radial-gradient(120% 80% at 50% -10%, #241f15 0%, #13110b 45%, #0b0a07 100%)'}}>
+        <div className="gilt" style={{maxWidth:460,width:'100%',padding:40,textAlign:'center',animation:'floatUp .4s'}}>
+          <div style={{fontSize:48,marginBottom:16}}>🎰</div>
+          <h2 style={{fontFamily:'var(--fs-display)',fontWeight:900,fontSize:26,marginBottom:12,color:'var(--gold-l)'}}>
+            Take a Break
+          </h2>
+          <p style={{color:'var(--cream-dim)',fontSize:15,lineHeight:1.65,marginBottom:24}}>
+            You&apos;ve had an incredible run — your balance is up <strong style={{color:'var(--gold-l)'}}>10×</strong> from when you started this session. We&apos;re asking you to step away from the table and cool off for a moment.
+          </p>
+          <div style={{fontFamily:'var(--fs-head)',fontSize:42,fontWeight:800,color:'var(--gold-l)',marginBottom:8,letterSpacing:'.04em'}}>
+            {mins}:{secs.toString().padStart(2,'0')}
+          </div>
+          <div style={{fontFamily:'var(--fs-head)',fontSize:11,letterSpacing:'.3em',color:'var(--cream-faint)',textTransform:'uppercase',marginBottom:32}}>
+            Blackjack resumes in
+          </div>
+          <Link href="/" className="btn" style={{display:'block',textAlign:'center',textDecoration:'none'}}>
+            Return to Lobby
+          </Link>
+          <p style={{marginTop:20,fontSize:11,color:'var(--cream-faint)',lineHeight:1.6}}>
+            Play responsibly. These chips hold no cash value.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   const isSplit = splitCards.length > 0
   const canDouble = phase === 'player' && (onSplit ? splitCards.length === 2 && bal >= splitBet : player.length === 2 && bal >= lastBet)

@@ -60,14 +60,6 @@ export default function RoulettePage() {
     init()
   }, [router])
 
-  // Set wheel background
-  const wheelBg = 'conic-gradient(from '+(-SEG/2).toFixed(4)+'deg,'+
-    WHEEL.map((n,i)=> COLORHEX[colOf(n)]+' '+(i*SEG).toFixed(4)+'deg '+((i+1)*SEG).toFixed(4)+'deg').join(',')+')'
-
-  useEffect(() => {
-    if (wheelRef.current) wheelRef.current.style.background = wheelBg
-  }, [wheelBg])
-
   function showToast(msg: string, kind = '') { setToast({ msg, kind }) }
 
   const total = Object.values(bets).reduce((a, b) => a+b, 0)
@@ -197,7 +189,19 @@ export default function RoulettePage() {
           <div className="wheel-housing">
             <div className="pointer" />
             <div className="wheel-rim" />
-            <div className="wheel" ref={wheelRef}>{pockets}</div>
+            <div className="wheel" ref={wheelRef}>
+              <svg viewBox="0 0 304 304" style={{position:'absolute',inset:0,width:'100%',height:'100%'}} aria-hidden="true">
+                {WHEEL.map((n, i) => {
+                  const a1 = (i*SEG - SEG/2 - 90) * Math.PI/180
+                  const a2 = ((i+1)*SEG - SEG/2 - 90) * Math.PI/180
+                  const r = 151, cx = 152, cy = 152
+                  const x1 = (cx + r*Math.cos(a1)).toFixed(2), y1 = (cy + r*Math.sin(a1)).toFixed(2)
+                  const x2 = (cx + r*Math.cos(a2)).toFixed(2), y2 = (cy + r*Math.sin(a2)).toFixed(2)
+                  return <path key={i} d={`M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 0 1 ${x2} ${y2} Z`} fill={COLORHEX[colOf(n)]} stroke="rgba(0,0,0,.35)" strokeWidth="2"/>
+                })}
+              </svg>
+              {pockets}
+            </div>
             <div className="hub" />
             <div className="ball" ref={ballRef} />
           </div>
@@ -296,17 +300,17 @@ export default function RoulettePage() {
         .wheel-side { display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px; }
         .wheel-housing { position:relative;width:330px;height:330px; }
         .pointer { position:absolute;top:-6px;left:50%;transform:translateX(-50%);z-index:8;width:0;height:0;border-left:13px solid transparent;border-right:13px solid transparent;border-top:22px solid var(--gold-l);filter:drop-shadow(0 3px 4px rgba(0,0,0,.6)); }
-        .wheel-rim { position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle, transparent 58%, #2a1f12 58%);box-shadow:0 20px 50px rgba(0,0,0,.6), inset 0 0 0 7px var(--gold-d), inset 0 0 0 13px #1a130a; }
-        .wheel { position:absolute;inset:13px;border-radius:50%;overflow:hidden;transition:transform 5.4s cubic-bezier(.16,.84,.28,1);will-change:transform;box-shadow:inset 0 0 30px rgba(0,0,0,.7), inset 0 0 0 2px rgba(217,182,90,.35); }
-        .pocket { position:absolute;top:0;left:50%;width:30px;height:50%;transform-origin:bottom center;margin-left:-15px;display:flex;justify-content:center; }
-        .pocket .num { color:#fff;font-family:var(--fs-head);font-weight:700;font-size:12px;width:100%;text-align:center;padding-top:6px;line-height:1;text-shadow:0 1px 2px rgba(0,0,0,.85); }
+        .wheel-rim { position:absolute;inset:0;border-radius:50%;background:transparent;pointer-events:none;z-index:5;box-shadow:0 20px 50px rgba(0,0,0,.6), inset 0 0 0 8px var(--gold-d), inset 0 0 0 16px #1a130a; }
+        .wheel { position:absolute;inset:13px;border-radius:50%;overflow:hidden;transition:transform 5.4s cubic-bezier(.16,.84,.28,1);will-change:transform; }
+        .pocket { position:absolute;top:0;left:50%;width:28px;height:50%;transform-origin:bottom center;margin-left:-14px;display:flex;justify-content:center;pointer-events:none; }
+        .pocket .num { color:#fff;font-family:var(--fs-head);font-weight:800;font-size:11px;width:100%;text-align:center;padding-top:7px;line-height:1;text-shadow:0 1px 3px rgba(0,0,0,.95),0 0 6px rgba(0,0,0,.8); }
         .hub { position:absolute;inset:33%;border-radius:50%;background:var(--gold-grad);z-index:6;box-shadow:inset 0 2px 6px rgba(255,255,255,.5), inset 0 -4px 10px var(--gold-deep), 0 4px 12px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center; }
         .hub::after { content:"";width:42%;height:42%;border-radius:50%;background:#1a130a;box-shadow:inset 0 2px 4px rgba(0,0,0,.8); }
         .ball { position:absolute;top:50%;left:50%;width:13px;height:13px;border-radius:50%;z-index:7;background:radial-gradient(circle at 35% 30%, #fff, #c9c2ad 70%);box-shadow:0 2px 5px rgba(0,0,0,.6);transform-origin:0 0;transition:transform 5.4s cubic-bezier(.16,.84,.28,1); }
         .result-disp { display:flex;flex-direction:column;align-items:center;gap:6px;min-height:84px;justify-content:center; }
         .result-num { width:62px;height:62px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--fs-display);font-weight:900;font-size:28px;color:#fff;box-shadow:var(--shadow-pop);border:2px solid rgba(217,182,90,.5);animation:floatUp .4s; }
         .result-net { font-family:var(--fs-head);font-weight:700;letter-spacing:.05em;font-size:16px; }
-        .board-side { display:flex;flex-direction:column;justify-content:center;gap:11px;min-width:0; }
+        .board-side { display:flex;flex-direction:column;justify-content:center;gap:11px;min-width:0;background:rgba(11,10,7,.65);border-radius:18px;padding:16px;border:1px solid rgba(217,182,90,.25);backdrop-filter:blur(2px); }
         .board-scroll { overflow-x:auto;padding-bottom:6px; }
         .board { display:flex;font-family:var(--fs-head);font-weight:700;min-width:500px; }
         .cell { border:1px solid rgba(217,182,90,.28);display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative;transition:.12s;user-select:none;color:#fff; }
