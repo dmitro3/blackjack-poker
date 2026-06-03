@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -37,12 +37,19 @@ export default function AdminPage() {
   const [grantTarget, setGrantTarget] = useState('')
   const [grantAmount, setGrantAmount] = useState('')
   const [activeTab, setActiveTab] = useState<'players' | 'stats' | 'settings'>('players')
+  const [refreshing, setRefreshing] = useState(false)
+  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null)
+  const [countdown, setCountdown] = useState(30)
   const router = useRouter()
   const supabase = createClient()
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const showToast = useCallback((msg: string, kind = '') => setToast({ msg, kind }), [])
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
+    else setRefreshing(true)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { router.push('/login'); return }
 
@@ -71,9 +78,20 @@ export default function AdminPage() {
     }
 
     setLoading(false)
+    setRefreshing(false)
+    setLastRefreshed(new Date())
+    setCountdown(30)
   }, [router, supabase])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    load()
+    intervalRef.current = setInterval(() => load(true), 30000)
+    countdownRef.current = setInterval(() => setCountdown(c => c <= 1 ? 30 : c - 1), 1000)
+    return () => {
+      clearInterval(intervalRef.current!)
+      clearInterval(countdownRef.current!)
+    }
+  }, [load])
 
   async function handleBan(userId: string, banned: boolean) {
     const res = await fetch('/api/admin/ban-user', {
@@ -192,9 +210,32 @@ export default function AdminPage() {
         {/* Players tab */}
         {activeTab === 'players' && (
           <div style={panelStyle}>
-            <h2 style={{ fontFamily: 'var(--fs-head)', fontWeight: 700, fontSize: 20, margin: '0 0 20px', letterSpacing: '.03em' }}>
-              <span className="gold-text">All Players</span>
-            </h2>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <h2 style={{ fontFamily: 'var(--fs-head)', fontWeight: 700, fontSize: 20, margin: 0, letterSpacing: '.03em' }}>
+                <span className="gold-text">All Players</span>
+              </h2>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                {lastRefreshed && (
+                  <span style={{ fontSize: 12, color: 'var(--cream-faint)', fontFamily: 'var(--fs-head)', letterSpacing: '.05em' }}>
+                    Refreshes in {countdown}s
+                  </span>
+                )}
+                <button
+                  className="btn btn-sm btn-ghost"
+                  onClick={() => load(true)}
+                  disabled={refreshing}
+                  style={{ display: 'flex', alignItems: 'center', gap: 7 }}
+                >
+                  <span style={{
+                    display: 'inline-block', width: 11, height: 11,
+                    border: '1.5px solid currentColor', borderTopColor: 'transparent',
+                    borderRadius: '50%',
+                    animation: refreshing ? 'spin360 .7s linear infinite' : 'none',
+                  }} />
+                  Refresh
+                </button>
+              </div>
+            </div>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
