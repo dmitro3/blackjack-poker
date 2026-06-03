@@ -265,8 +265,8 @@ function LobbyContent() {
                 <div style={{
                   width:150,height:150,borderRadius:'50%',
                   background:`conic-gradient(from 0deg,
-                    #1a1a1a 0 10deg,#b3122a 10deg 20deg,#1a1a1a 20deg 30deg,#137a4a 30deg 40deg,
-                    #b3122a 40deg 50deg,#1a1a1a 50deg 60deg,#b3122a 60deg 70deg,#1a1a1a 70deg 80deg,
+                    #137a4a 0 10deg,#b3122a 10deg 20deg,#1a1a1a 20deg 30deg,#b3122a 30deg 40deg,
+                    #1a1a1a 40deg 50deg,#b3122a 50deg 60deg,#1a1a1a 60deg 70deg,#b3122a 70deg 80deg,
                     #b3122a 80deg 90deg,#1a1a1a 90deg 100deg,#b3122a 100deg 110deg,#1a1a1a 110deg 120deg,
                     #b3122a 120deg 130deg,#1a1a1a 130deg 140deg,#b3122a 140deg 150deg,#1a1a1a 150deg 160deg,
                     #b3122a 160deg 170deg,#1a1a1a 170deg 180deg,#137a4a 180deg 190deg,#b3122a 190deg 200deg,
