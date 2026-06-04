@@ -194,10 +194,10 @@ function LobbyContent() {
         </section>
 
         {/* Game cards */}
-        <section style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:24,marginTop:46,gridAutoRows:'1fr'}}>
+        <section style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:24,marginTop:46}}>
           {/* Blackjack */}
           <Link href="/blackjack" style={{
-            position:'relative',borderRadius:'var(--radius-lg)',overflow:'hidden',cursor:'pointer',
+            gridColumn:'span 2',position:'relative',borderRadius:'var(--radius-lg)',overflow:'hidden',cursor:'pointer',
             textDecoration:'none',color:'inherit',border:'1px solid rgba(217,182,90,.32)',
             boxShadow:'var(--shadow-pop)',transition:'transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s, border-color .25s',
             display:'flex',flexDirection:'column',minHeight:340,
@@ -228,16 +228,26 @@ function LobbyContent() {
 
           {/* Poker */}
           <Link href="/poker" style={{
-            position:'relative',borderRadius:'var(--radius-lg)',overflow:'hidden',cursor:'pointer',
+            gridColumn:'span 2',position:'relative',borderRadius:'var(--radius-lg)',overflow:'hidden',cursor:'pointer',
             textDecoration:'none',color:'inherit',border:'1px solid rgba(217,182,90,.32)',
             boxShadow:'var(--shadow-pop)',transition:'transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s, border-color .25s',
             display:'flex',flexDirection:'column',minHeight:340,
           }} className="game felt felt-red">
-            <div style={{flex:1,position:'relative',display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden'}}>
-              <div style={{position:'relative',width:180,height:107,zIndex:2}}>
-                <div className="chip" style={{background:'#1a1a1a',position:'absolute',top:45,left:0} as React.CSSProperties}><span>5K</span></div>
-                <div className="chip" style={{background:'#b3122a',position:'absolute',top:8,left:59} as React.CSSProperties}><span>25K</span></div>
-                <div className="chip" style={{background:'#137a4a',position:'absolute',top:45,left:118} as React.CSSProperties}><span>10K</span></div>
+            <div style={{flex:1,position:'relative',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:10,overflow:'hidden',padding:'20px 0 0'}}>
+              {/* Community cards */}
+              <div style={{display:'flex',gap:6,zIndex:2,position:'relative'}}>
+                {[{r:'A',s:'♠',red:false},{r:'K',s:'♠',red:false},{r:'Q',s:'♠',red:false}].map((c,i) => (
+                  <div key={i} className={'card '+(c.red?'red':'')} style={{'--w':'60px'} as React.CSSProperties}>
+                    <div className="pip-tl"><div className="rank">{c.r}</div><div className="pip-suit">{c.s}</div></div>
+                    <div className="center-suit">{c.s}</div>
+                    <div className="pip-br"><div className="rank">{c.r}</div><div className="pip-suit">{c.s}</div></div>
+                  </div>
+                ))}
+              </div>
+              {/* Hole cards (face down) */}
+              <div style={{display:'flex',gap:8,zIndex:2,position:'relative'}}>
+                <div className="card back" style={{'--w':'60px'} as React.CSSProperties} />
+                <div className="card back" style={{'--w':'60px'} as React.CSSProperties} />
               </div>
               <div style={{position:'absolute',inset:0,background:'radial-gradient(120% 100% at 50% 120%, transparent 40%, rgba(0,0,0,.5))'}}/>
             </div>
@@ -255,7 +265,7 @@ function LobbyContent() {
 
           {/* Roulette */}
           <Link href="/roulette" style={{
-            position:'relative',borderRadius:'var(--radius-lg)',overflow:'hidden',cursor:'pointer',
+            gridColumn:'span 2',position:'relative',borderRadius:'var(--radius-lg)',overflow:'hidden',cursor:'pointer',
             textDecoration:'none',color:'inherit',border:'1px solid rgba(217,182,90,.32)',
             boxShadow:'var(--shadow-pop)',transition:'transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s, border-color .25s',
             display:'flex',flexDirection:'column',minHeight:340,
@@ -295,25 +305,51 @@ function LobbyContent() {
             </div>
           </Link>
 
-          {/* Slots */}
+          {/* Slots — centered in row 2 */}
           <Link href="/slots" style={{
-            position:'relative',borderRadius:'var(--radius-lg)',overflow:'hidden',cursor:'pointer',
+            gridColumn:'2 / span 2',position:'relative',borderRadius:'var(--radius-lg)',overflow:'hidden',cursor:'pointer',
             textDecoration:'none',color:'inherit',border:'1px solid rgba(217,182,90,.32)',
             boxShadow:'var(--shadow-pop)',transition:'transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s, border-color .25s',
             display:'flex',flexDirection:'column',minHeight:340,
           }} className="game felt">
             <div style={{flex:1,position:'relative',display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden'}}>
-              <div style={{zIndex:2,display:'flex',gap:10,alignItems:'center'}}>
-                {['🍒','7','♦'].map((s, i) => (
-                  <div key={i} style={{
-                    width:62,height:82,borderRadius:10,
-                    background:'rgba(0,0,0,.6)',border:'1.5px solid rgba(217,182,90,.4)',
-                    display:'flex',alignItems:'center',justifyContent:'center',
-                    fontSize: s==='7'?30:36,
-                    color: s==='7'?'#d9b65a':s==='♦'?'#4fc8f0':'#e73d5c',
-                    fontFamily:'Cinzel,serif',fontWeight:900,
-                  }}>{s}</div>
-                ))}
+              {/* Mini slot machine cabinet */}
+              <div style={{zIndex:2,position:'relative',display:'flex',flexDirection:'column',alignItems:'center',gap:0}}>
+                {/* Cabinet top marquee */}
+                <div style={{
+                  background:'linear-gradient(180deg,#2a1f08,#1a130a)',
+                  border:'2px solid rgba(217,182,90,.6)',borderBottom:'none',
+                  borderRadius:'12px 12px 0 0',padding:'6px 24px',
+                  fontFamily:'Cinzel,serif',fontWeight:900,fontSize:11,letterSpacing:'.4em',
+                  color:'var(--gold-l)',textShadow:'0 0 12px rgba(217,182,90,.8)',
+                  whiteSpace:'nowrap',
+                }}>JACKPOT</div>
+                {/* Reels window */}
+                <div style={{
+                  background:'rgba(0,0,0,.8)',border:'2px solid rgba(217,182,90,.6)',
+                  borderRadius:'0 0 10px 10px',padding:'10px 14px',
+                  display:'flex',gap:8,alignItems:'center',position:'relative',
+                }}>
+                  {/* Win line */}
+                  <div style={{position:'absolute',left:0,right:0,top:'50%',height:2,background:'rgba(217,182,90,.5)',transform:'translateY(-50%)',zIndex:3,pointerEvents:'none'}}/>
+                  {[{s:'7',c:'#d9b65a'},{s:'7',c:'#d9b65a'},{s:'7',c:'#d9b65a'}].map((r,i) => (
+                    <div key={i} style={{
+                      width:58,height:72,borderRadius:8,
+                      background:'linear-gradient(180deg,#1a1306,#0b0a07)',
+                      border:'1.5px solid rgba(217,182,90,.3)',
+                      display:'flex',alignItems:'center',justifyContent:'center',
+                      fontFamily:'Cinzel,serif',fontWeight:900,fontSize:32,
+                      color:r.c,textShadow:`0 0 16px ${r.c}`,
+                      boxShadow:`inset 0 0 12px rgba(0,0,0,.6), 0 0 8px rgba(217,182,90,.2)`,
+                      position:'relative',zIndex:2,
+                    }}>{r.s}</div>
+                  ))}
+                </div>
+                {/* Win label */}
+                <div style={{
+                  marginTop:8,fontFamily:'Cinzel,serif',fontWeight:700,fontSize:11,
+                  letterSpacing:'.25em',color:'#d9b65a',textShadow:'0 0 10px rgba(217,182,90,.7)',
+                }}>× 100 WIN</div>
               </div>
               <div style={{position:'absolute',inset:0,background:'radial-gradient(120% 100% at 50% 120%, transparent 40%, rgba(0,0,0,.5))'}}/>
             </div>
@@ -326,26 +362,39 @@ function LobbyContent() {
             </div>
           </Link>
 
-          {/* Baccarat */}
+          {/* Baccarat — centered in row 2, red felt */}
           <Link href="/baccarat" style={{
-            position:'relative',borderRadius:'var(--radius-lg)',overflow:'hidden',cursor:'pointer',
+            gridColumn:'4 / span 2',position:'relative',borderRadius:'var(--radius-lg)',overflow:'hidden',cursor:'pointer',
             textDecoration:'none',color:'inherit',border:'1px solid rgba(217,182,90,.32)',
             boxShadow:'var(--shadow-pop)',transition:'transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s, border-color .25s',
             display:'flex',flexDirection:'column',minHeight:340,
-          }} className="game felt">
-            <div style={{flex:1,position:'relative',display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden'}}>
-              <div style={{zIndex:2,display:'flex',gap:-12,position:'relative'}}>
-                {[{r:'K',s:'♠',red:false},{r:'A',s:'♥',red:true},{r:'9',s:'♦',red:true}].map((c,i) => (
-                  <div key={i} style={{
-                    width:62,height:88,borderRadius:8,background:'#f0ece2',
-                    border:'1px solid #ccc',display:'flex',flexDirection:'column',
-                    padding:'6px 8px',marginLeft:i?-18:0,boxShadow:'0 4px 14px rgba(0,0,0,.4)',
-                    color:c.red?'#c4152e':'#1a1a1a',fontFamily:'Cinzel,serif',fontWeight:800,fontSize:16,
-                  }}>
-                    <div>{c.r}</div><div>{c.s}</div>
+          }} className="game felt felt-red">
+            <div style={{flex:1,position:'relative',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:12,overflow:'hidden',padding:16}}>
+              {/* Banker hand label */}
+              <div style={{fontFamily:'Cinzel,serif',fontSize:10,letterSpacing:'.3em',color:'rgba(217,182,90,.6)',textTransform:'uppercase',zIndex:2}}>Banker · 9</div>
+              {/* Banker cards */}
+              <div style={{display:'flex',gap:-8,zIndex:2,position:'relative'}}>
+                {[{r:'K',s:'♠',red:false},{r:'9',s:'♦',red:true}].map((c,i) => (
+                  <div key={i} className={'card '+(c.red?'red':'')} style={{'--w':'72px',marginLeft:i?'-28px':'0'} as React.CSSProperties}>
+                    <div className="pip-tl"><div className="rank">{c.r}</div><div className="pip-suit">{c.s}</div></div>
+                    <div className="center-suit">{c.s}</div>
+                    <div className="pip-br"><div className="rank">{c.r}</div><div className="pip-suit">{c.s}</div></div>
                   </div>
                 ))}
               </div>
+              {/* vs divider */}
+              <div style={{fontFamily:'Cinzel,serif',fontWeight:900,fontSize:11,letterSpacing:'.4em',color:'rgba(217,182,90,.5)',zIndex:2}}>— vs —</div>
+              {/* Player cards */}
+              <div style={{display:'flex',zIndex:2,position:'relative'}}>
+                {[{r:'A',s:'♥',red:true},{r:'8',s:'♣',red:false}].map((c,i) => (
+                  <div key={i} className={'card '+(c.red?'red':'')} style={{'--w':'72px',marginLeft:i?'-28px':'0'} as React.CSSProperties}>
+                    <div className="pip-tl"><div className="rank">{c.r}</div><div className="pip-suit">{c.s}</div></div>
+                    <div className="center-suit">{c.s}</div>
+                    <div className="pip-br"><div className="rank">{c.r}</div><div className="pip-suit">{c.s}</div></div>
+                  </div>
+                ))}
+              </div>
+              <div style={{fontFamily:'Cinzel,serif',fontSize:10,letterSpacing:'.3em',color:'rgba(217,182,90,.6)',textTransform:'uppercase',zIndex:2}}>Player · 9</div>
               <div style={{position:'absolute',inset:0,background:'radial-gradient(120% 100% at 50% 120%, transparent 40%, rgba(0,0,0,.5))'}}/>
             </div>
             <div style={{padding:'20px 24px',background:'linear-gradient(180deg, rgba(19,17,11,.6), var(--ink-900))',borderTop:'1px solid rgba(217,182,90,.25)',position:'relative',zIndex:2}}>

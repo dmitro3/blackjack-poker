@@ -58,15 +58,19 @@ function Reel({ sym, spinning, delay }: { sym: string; spinning: boolean; delay:
 
   return (
     <div style={{
-      width: 110, height: 130, display:'flex', alignItems:'center', justifyContent:'center',
-      background:'rgba(0,0,0,.55)', borderRadius:16, border:'2px solid rgba(217,182,90,.3)',
+      width: 150, height: 180, display:'flex', alignItems:'center', justifyContent:'center',
+      background:'linear-gradient(180deg,#1a1306,#0d0a04)',
+      borderRadius:18,
+      border: blur ? '2px solid rgba(217,182,90,.2)' : '2px solid rgba(217,182,90,.55)',
+      boxShadow: blur ? 'none' : `0 0 18px rgba(${SYM_COLOR[displaySym] === '#d9b65a' ? '217,182,90' : SYM_COLOR[displaySym] === '#4fc8f0' ? '79,200,240' : '255,255,255'},.25), inset 0 0 20px rgba(0,0,0,.6)`,
       userSelect:'none',
-      filter: blur ? 'blur(3px)' : 'none',
-      transition: blur ? 'none' : 'filter .15s',
+      filter: blur ? 'blur(4px)' : 'none',
+      transition: blur ? 'none' : 'filter .15s, box-shadow .2s',
       color: SYM_COLOR[displaySym] || '#fff',
       fontFamily: displaySym === 'BAR' || displaySym === '7' ? 'Cinzel, serif' : 'inherit',
       fontWeight: displaySym === 'BAR' || displaySym === '7' ? 900 : 400,
-      fontSize: displaySym === 'BAR' ? 28 : 52,
+      fontSize: displaySym === 'BAR' ? 36 : 68,
+      textShadow: blur ? 'none' : `0 0 20px ${SYM_COLOR[displaySym] || '#fff'}88`,
     }}>
       {displaySym}
     </div>
@@ -174,58 +178,113 @@ export default function SlotsPage() {
 
       <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:24,gap:32}}>
         {/* Machine cabinet */}
-        <div style={{background:'linear-gradient(180deg,#1e1812,#140e08)',border:'2px solid rgba(217,182,90,.4)',borderRadius:32,padding:40,boxShadow:'0 30px 80px rgba(0,0,0,.7), inset 0 1px 0 rgba(217,182,90,.3)',maxWidth:500,width:'100%'}}>
+        <div style={{
+          background:'linear-gradient(180deg,#231b0f,#160f07)',
+          border:'2px solid rgba(217,182,90,.5)',borderRadius:36,
+          padding:'36px 48px 44px',
+          boxShadow:'0 40px 100px rgba(0,0,0,.8), inset 0 2px 0 rgba(217,182,90,.4), inset 0 -2px 0 rgba(0,0,0,.6)',
+          maxWidth:580,width:'100%',
+          position:'relative',
+        }}>
+          {/* Corner accents */}
+          {[{top:16,left:16},{top:16,right:16},{bottom:16,left:16},{bottom:16,right:16}].map((pos,i) => (
+            <div key={i} style={{position:'absolute',...pos,width:12,height:12,borderRadius:3,background:'var(--gold-d)',opacity:.7}}/>
+          ))}
+
           {/* Marquee */}
-          <div style={{textAlign:'center',marginBottom:28}}>
-            <div className="gold-text" style={{fontFamily:'var(--fs-display)',fontWeight:900,fontSize:28,letterSpacing:'.3em',textShadow:'0 0 30px rgba(217,182,90,.6)'}}>
-              HOUSE SLOTS
+          <div style={{textAlign:'center',marginBottom:32,position:'relative'}}>
+            <div style={{
+              display:'inline-block',
+              background:'linear-gradient(180deg,#0b0a07,#1a130a)',
+              border:'1px solid rgba(217,182,90,.4)',
+              borderRadius:12,padding:'10px 32px',
+              boxShadow:'inset 0 0 20px rgba(0,0,0,.5), 0 0 30px rgba(217,182,90,.1)',
+            }}>
+              <div className="gold-text" style={{fontFamily:'var(--fs-display)',fontWeight:900,fontSize:34,letterSpacing:'.35em'}}>
+                HOUSE SLOTS
+              </div>
             </div>
-            <div style={{fontFamily:'var(--fs-head)',fontSize:10,letterSpacing:'.4em',color:'var(--cream-faint)',marginTop:4}}>
-              PULL THE LEVER · WIN BIG
+            <div style={{fontFamily:'var(--fs-head)',fontSize:10,letterSpacing:'.5em',color:'var(--cream-faint)',marginTop:10,textTransform:'uppercase'}}>
+              Classic Three Reel · Pull &amp; Win
             </div>
           </div>
 
-          {/* Win line */}
-          <div style={{position:'relative',display:'flex',gap:12,justifyContent:'center',alignItems:'center',marginBottom:12}}>
-            <div style={{position:'absolute',top:'50%',left:0,right:0,height:3,background:'linear-gradient(90deg,transparent,rgba(217,182,90,.5),transparent)',transform:'translateY(-50%)',pointerEvents:'none'}}/>
-            <Reel sym={syms[0]} spinning={spinning} delay={0} />
-            <Reel sym={syms[1]} spinning={spinning} delay={300} />
-            <Reel sym={syms[2]} spinning={spinning} delay={600} />
+          {/* Reels frame */}
+          <div style={{
+            background:'#0a0806',border:'3px solid rgba(217,182,90,.4)',borderRadius:22,
+            padding:'20px 24px 16px',marginBottom:20,
+            boxShadow:'inset 0 8px 30px rgba(0,0,0,.8), inset 0 0 0 1px rgba(217,182,90,.1)',
+            position:'relative',
+          }}>
+            {/* Win line indicator */}
+            <div style={{position:'absolute',left:-28,top:'50%',transform:'translateY(-50%)',display:'flex',alignItems:'center',gap:4}}>
+              <div style={{width:12,height:12,borderRadius:'50%',background:spinning?'rgba(217,182,90,.2)':'var(--gold)',boxShadow:spinning?'none':'0 0 8px var(--gold)',transition:'.3s'}}/>
+              <div style={{width:16,height:2,background:'rgba(217,182,90,.4)'}}/>
+            </div>
+            <div style={{position:'absolute',right:-28,top:'50%',transform:'translateY(-50%)',display:'flex',alignItems:'center',gap:4,flexDirection:'row-reverse'}}>
+              <div style={{width:12,height:12,borderRadius:'50%',background:spinning?'rgba(217,182,90,.2)':'var(--gold)',boxShadow:spinning?'none':'0 0 8px var(--gold)',transition:'.3s'}}/>
+              <div style={{width:16,height:2,background:'rgba(217,182,90,.4)'}}/>
+            </div>
+            {/* Win line across reels */}
+            <div style={{position:'absolute',top:'50%',left:0,right:0,height:2,background:`linear-gradient(90deg,transparent,rgba(217,182,90,${lastNet !== null && lastNet > 0 && !spinning ? '.9' : '.25'}),transparent)`,transform:'translateY(-50%)',pointerEvents:'none',transition:'.3s'}}/>
+            <div style={{display:'flex',gap:16,justifyContent:'center',alignItems:'center'}}>
+              <Reel sym={syms[0]} spinning={spinning} delay={0} />
+              <Reel sym={syms[1]} spinning={spinning} delay={350} />
+              <Reel sym={syms[2]} spinning={spinning} delay={700} />
+            </div>
           </div>
 
           {/* Result display */}
-          <div style={{textAlign:'center',height:32,marginBottom:8}}>
-            {lastNet !== null && !spinning && (
-              <div style={{fontFamily:'var(--fs-head)',fontWeight:700,fontSize:18,color: lastNet > 0 ? 'var(--gold-l)' : lastNet < 0 ? '#e7708a' : 'var(--cream-dim)',animation:'floatUp .35s'}}>
-                {lastNet > 0 ? `WIN  +${fmt(lastNet)}` : lastNet < 0 ? 'No match' : 'Return'}
+          <div style={{textAlign:'center',height:38,marginBottom:20}}>
+            {lastNet !== null && !spinning ? (
+              <div style={{
+                fontFamily:'var(--fs-head)',fontWeight:700,fontSize:22,
+                color: lastNet > 0 ? 'var(--gold-l)' : lastNet < 0 ? '#e7708a' : 'var(--cream-dim)',
+                animation:'floatUp .35s',
+                textShadow: lastNet > 0 ? '0 0 20px rgba(217,182,90,.6)' : 'none',
+                letterSpacing:'.1em',
+              }}>
+                {lastNet > 0 ? `✦ WIN  +${fmt(lastNet)} ✦` : lastNet < 0 ? 'No match — try again' : 'Your bet returned'}
               </div>
-            )}
+            ) : spinning ? (
+              <div style={{fontFamily:'var(--fs-head)',fontSize:13,letterSpacing:'.4em',color:'var(--cream-faint)',animation:'none',textTransform:'uppercase'}}>
+                Good luck…
+              </div>
+            ) : null}
           </div>
 
           {/* Bet selector */}
-          <div style={{display:'flex',alignItems:'center',gap:10,justifyContent:'center',marginBottom:24}}>
-            <span style={{fontFamily:'var(--fs-head)',fontSize:12,letterSpacing:'.2em',color:'var(--cream-faint)',textTransform:'uppercase'}}>Bet</span>
+          <div style={{display:'flex',alignItems:'center',gap:8,justifyContent:'center',marginBottom:24}}>
+            <span style={{fontFamily:'var(--fs-head)',fontSize:11,letterSpacing:'.25em',color:'var(--cream-faint)',textTransform:'uppercase',marginRight:4}}>Bet</span>
             {BETS.map(b => (
               <button key={b} onClick={() => { if (!spinning) setBet(b) }}
-                style={{padding:'8px 16px',borderRadius:999,fontFamily:'var(--fs-head)',fontWeight:700,fontSize:13,letterSpacing:'.06em',border:'1px solid rgba(217,182,90,' + (bet===b?'.8':'.25') + ')',background:bet===b?'rgba(217,182,90,.18)':'rgba(0,0,0,.4)',color:bet===b?'var(--gold-l)':'var(--cream-dim)',cursor:'pointer',transition:'.15s'}}>
+                style={{
+                  padding:'10px 20px',borderRadius:999,
+                  fontFamily:'var(--fs-head)',fontWeight:700,fontSize:13,letterSpacing:'.06em',
+                  border:'1px solid rgba(217,182,90,'+(bet===b?'.9':'.25')+')',
+                  background:bet===b?'rgba(217,182,90,.2)':'rgba(0,0,0,.4)',
+                  color:bet===b?'var(--gold-l)':'var(--cream-dim)',
+                  cursor:'pointer',transition:'.15s',
+                  boxShadow:bet===b?'0 0 12px rgba(217,182,90,.2)':'none',
+                }}>
                 {fmtShort(b)}
               </button>
             ))}
           </div>
 
           {/* Spin button */}
-          <div style={{display:'flex',gap:12,justifyContent:'center'}}>
+          <div style={{display:'flex',gap:14,justifyContent:'center'}}>
             <button
               className="btn"
-              style={{minWidth:180,fontSize:18,padding:'16px 40px',letterSpacing:'.1em',opacity: spinning || bal < bet ? .5 : 1}}
+              style={{minWidth:220,fontSize:20,padding:'18px 48px',letterSpacing:'.15em',opacity: spinning || bal < bet ? .5 : 1}}
               disabled={spinning || bal < bet}
               onClick={spin}
             >
-              {spinning ? 'Spinning…' : 'SPIN'}
+              {spinning ? 'Spinning…' : '▶  SPIN'}
             </button>
             <button
               className={'btn btn-sm' + (autoSpin ? '' : ' btn-ghost')}
-              style={{fontSize:12,padding:'8px 18px'}}
+              style={{fontSize:12,padding:'10px 20px',minWidth:90}}
               onClick={() => setAutoSpin(v => !v)}
               disabled={bal < bet && !autoSpin}
             >

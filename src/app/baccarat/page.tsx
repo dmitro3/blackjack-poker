@@ -49,20 +49,14 @@ const CHIPS_DEF = [
 
 function CardComp({ card, faceDown }: { card: Card | null; faceDown?: boolean }) {
   if (!card || faceDown) return (
-    <div className="bac-card back" />
+    <div className="card back" style={{'--w':'72px'} as React.CSSProperties} />
   )
   const red = RED_SUITS.has(card.suit)
   return (
-    <div className={'bac-card'+(red?' red':'')}>
-      <div style={{position:'absolute',top:6,left:8,lineHeight:1}}>
-        <div style={{fontSize:15,fontWeight:800}}>{card.rank}</div>
-        <div style={{fontSize:13}}>{card.suit}</div>
-      </div>
-      <div style={{position:'absolute',bottom:6,right:8,lineHeight:1,transform:'rotate(180deg)'}}>
-        <div style={{fontSize:15,fontWeight:800}}>{card.rank}</div>
-        <div style={{fontSize:13}}>{card.suit}</div>
-      </div>
-      <div style={{fontSize:28,fontWeight:700}}>{card.suit}</div>
+    <div className={'card '+(red?'red':'')} style={{'--w':'72px'} as React.CSSProperties}>
+      <div className="pip-tl"><div className="rank">{card.rank}</div><div className="pip-suit">{card.suit}</div></div>
+      <div className="center-suit">{card.suit}</div>
+      <div className="pip-br"><div className="rank">{card.rank}</div><div className="pip-suit">{card.suit}</div></div>
     </div>
   )
 }
@@ -390,9 +384,7 @@ export default function BaccaratPage() {
       )}
 
       <style>{`
-        .bac-card { width:72px;height:104px;border-radius:10px;background:#f0ece2;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;position:relative;color:#1a1a1a;font-family:'Cinzel',serif;box-shadow:0 4px 14px rgba(0,0,0,.4);animation:dealIn .4s cubic-bezier(.2,.9,.25,1) both; }
-        .bac-card.red { color:#c4152e; }
-        .bac-card.back { background:repeating-linear-gradient(45deg,#7a1020 0 4px,#5e0c19 4px 8px);border:1px solid rgba(217,182,90,.3);box-shadow:0 4px 14px rgba(0,0,0,.4); }
+        .card { animation: dealIn .4s cubic-bezier(.2,.9,.25,1) both; }
       `}</style>
     </div>
   )
