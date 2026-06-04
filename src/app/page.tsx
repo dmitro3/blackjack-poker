@@ -170,6 +170,12 @@ function LobbyContent() {
           </div>
         </Link>
         <div style={{display:'flex',alignItems:'center',gap:14}}>
+          <button
+            className="btn btn-sm btn-ghost"
+            style={{fontSize:18, padding:'8px 13px', lineHeight:1, minWidth:0}}
+            onClick={() => { const next = !muted; setMutedUI(next); setMuted(next) }}
+            title={muted ? 'Unmute' : 'Mute'}
+          >{muted ? '🔇' : '🔊'}</button>
           <div className="balance">
             <div className="coin">H</div>
             <span className="amt tabnum">{fmt(profile?.chips || 0)}</span>
