@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { playDeal, playChip, playWin, playLose, startTension, stopTension, isMuted, setMuted } from '@/lib/casino-sounds'
 
 const SUITS = [
   { s: '♠', c: 'black' }, { s: '♥', c: 'red' },
@@ -110,6 +111,7 @@ export default function BlackjackPage() {
   const [showHelp, setShowHelp] = useState(false)
   const [showBreak, setShowBreak] = useState(false)
   const [breakCountdown, setBreakCountdown] = useState(0)
+  const [muted, setMutedUI] = useState(false)
   const sessionStartBalRef = useRef(0)
 
   // Split state
@@ -127,6 +129,10 @@ export default function BlackjackPage() {
   const balRef = useRef(bal)
   const router = useRouter()
   const supabase = createClient()
+
+  useEffect(() => {
+    try { setMutedUI(localStorage.getItem('casinoMuted') === '1') } catch {}
+  }, [])
 
   useEffect(() => {
     async function init() {
@@ -205,10 +211,10 @@ export default function BlackjackPage() {
       const p: Card[] = [], d: Card[] = []
       setPlayer([]); setDealer([])
       await sleep(60)
-      p.push(deckRef.current.pop()!); setPlayer([...p]); await sleep(260)
-      d.push(deckRef.current.pop()!); setDealer([...d]); await sleep(260)
-      p.push(deckRef.current.pop()!); setPlayer([...p]); await sleep(260)
-      d.push(deckRef.current.pop()!); setDealer([...d]); await sleep(360)
+      playDeal(); p.push(deckRef.current.pop()!); setPlayer([...p]); await sleep(260)
+      playDeal(); d.push(deckRef.current.pop()!); setDealer([...d]); await sleep(260)
+      playDeal(); p.push(deckRef.current.pop()!); setPlayer([...p]); await sleep(260)
+      playDeal(); d.push(deckRef.current.pop()!); setDealer([...d]); await sleep(360)
       const pv = handValue(p).total, dv = handValue(d).total
       if (pv === 21 || dv === 21) {
         setHideHole(false); await sleep(500)
@@ -232,6 +238,7 @@ export default function BlackjackPage() {
   function addChip(v: number) {
     if (phase !== 'bet') return
     if (v > bal - bet) { showToast('Not enough chips for that'); return }
+    playChip()
     setBet(b => b + v)
   }
 
@@ -250,10 +257,10 @@ export default function BlackjackPage() {
     const p: Card[] = [], d: Card[] = []
     setPlayer([]); setDealer([])
     await sleep(60)
-    p.push(draw()); setPlayer([...p]); await sleep(260)
-    d.push(draw()); setDealer([...d]); await sleep(260)
-    p.push(draw()); setPlayer([...p]); await sleep(260)
-    d.push(draw()); setDealer([...d]); await sleep(360)
+    playDeal(); p.push(draw()); setPlayer([...p]); await sleep(260)
+    playDeal(); d.push(draw()); setDealer([...d]); await sleep(260)
+    playDeal(); p.push(draw()); setPlayer([...p]); await sleep(260)
+    playDeal(); d.push(draw()); setDealer([...d]); await sleep(360)
     const pv = handValue(p).total, dv = handValue(d).total
     if (pv === 21 || dv === 21) {
       setHideHole(false); await sleep(500)
@@ -359,6 +366,7 @@ export default function BlackjackPage() {
 
   async function runDealer(h1: Card[], s1: number, h2: Card[] | null, s2: number) {
     setPhase('dealer')
+    startTension()
     setHideHole(true); await sleep(200)
     setHideHole(false); await sleep(620)
     let d = [...dealer]
@@ -389,6 +397,8 @@ export default function BlackjackPage() {
       msg2 = kind2 === 'win' ? (dv > 21 ? 'Dealer busts' : 'You win') : kind2 === 'push' ? 'Push' : (handValue(h2).total > 21 ? 'Bust' : 'Dealer wins')
     }
 
+    stopTension()
+    if (net1 > 0 || net2 > 0) playWin(); else if (kind1 === 'lose' && (!h2 || kind2 === 'lose')) playLose()
     setBal(b => b + payout1 + payout2)
     setResult({ kind: kind1, msg: msg1, net: net1 })
     if (h2 && h2.length > 0) setSplitResult({ kind: kind2, msg: msg2, net: net2 })
@@ -418,6 +428,7 @@ export default function BlackjackPage() {
     else if (kind === 'push') { payout = stake;   kindUI = 'push'; msg = 'Push' }
     else                      { payout = 0;       kindUI = 'lose'; msg = msgIn || 'Dealer wins' }
     const net = payout - stake
+    if (kindUI === 'win') playWin(); else if (kindUI === 'lose') playLose()
     setBal(b => b + payout)
     setResult({ kind: kindUI, msg, net })
     showToast(msg + (net > 0 ? '  +'+fmt(net) : net < 0 ? '  −'+fmt(-net) : ''), kindUI === 'push' ? '' : kindUI)
@@ -489,6 +500,12 @@ export default function BlackjackPage() {
         </div>
         <div className="right">
           <button className="btn btn-sm btn-ghost" onClick={() => setShowHelp(true)}>How to Play</button>
+          <button
+            className="btn btn-sm btn-ghost"
+            style={{fontSize:18, padding:'8px 13px', lineHeight:1, minWidth:0}}
+            onClick={() => { const next = !muted; setMutedUI(next); setMuted(next) }}
+            title={muted ? 'Unmute' : 'Mute'}
+          >{muted ? '🔇' : '🔊'}</button>
           <div className="balance">
             <div className="coin">H</div>
             <span className="amt tabnum">{fmt(bal)}</span>

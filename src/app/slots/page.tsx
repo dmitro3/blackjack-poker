@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { playChip, playWin, playLose, startTension, stopTension, setMuted } from '@/lib/casino-sounds'
 
 const STRIP = ['🍋','🍒','🍋','BAR','🍒','🍋','🔔','🍒','BAR','🍋','🍒','🍋','🔔','🍒','🍋','BAR','🍒','🍋','🔔','🍋','🍒','BAR','🍋','🍒','♦','🍋','🍒','🔔','BAR','🍒','🍋','🍒','🔔','🍋','🍒','7','🍋','🍒','BAR','🔔','🍋','🍒','BAR','🍒','🍋','🔔','🍒','♦']
 const SYM_COLOR: Record<string,string> = { '7':'#d9b65a','♦':'#4fc8f0','BAR':'#aab8c8','🔔':'#f5c842','🍒':'#e73d5c','🍋':'#d4d44a' }
@@ -93,9 +94,14 @@ export default function SlotsPage() {
   const [loading, setLoading] = useState(true)
   const [showHelp, setShowHelp] = useState(false)
   const [autoSpin, setAutoSpin] = useState(false)
+  const [muted, setMutedUI] = useState(false)
   const autoRef = useRef(false)
   const router = useRouter()
   const supabase = createClient()
+
+  useEffect(() => {
+    try { setMutedUI(localStorage.getItem('casinoMuted') === '1') } catch {}
+  }, [])
 
   useEffect(() => {
     async function init() {
@@ -112,15 +118,18 @@ export default function SlotsPage() {
     if (spinning || bal < bet) return
     setBal(b => b - bet)
     setSpinning(true)
+    startTension()
     setLastNet(null)
     const result = [randomSym(), randomSym(), randomSym()]
     await new Promise<void>(r => setTimeout(r, 2200))
     setSyms(result)
     setSpinning(false)
+    stopTension()
     const win = payout(result, bet)
     const net = win - bet
     setBal(b => b + win)
     setLastNet(net)
+    if (win > 0) playWin(); else playLose()
     const label = result.join(' ')
     if (net > 0) {
       setToast({ msg: `${label}  +${fmt(net)}`, kind: 'win' })
@@ -169,6 +178,12 @@ export default function SlotsPage() {
         </div>
         <div style={{display:'flex',alignItems:'center',gap:12}}>
           <button className="btn btn-sm btn-ghost" onClick={() => setShowHelp(true)}>How to Play</button>
+          <button
+            className="btn btn-sm btn-ghost"
+            style={{fontSize:18, padding:'8px 13px', lineHeight:1, minWidth:0}}
+            onClick={() => { const next = !muted; setMutedUI(next); setMuted(next) }}
+            title={muted ? 'Unmute' : 'Mute'}
+          >{muted ? '🔇' : '🔊'}</button>
           <div className="balance">
             <div className="coin">H</div>
             <span className="amt tabnum">{fmt(bal)}</span>
@@ -257,7 +272,7 @@ export default function SlotsPage() {
           <div style={{display:'flex',alignItems:'center',gap:8,justifyContent:'center',marginBottom:24}}>
             <span style={{fontFamily:'var(--fs-head)',fontSize:11,letterSpacing:'.25em',color:'var(--cream-faint)',textTransform:'uppercase',marginRight:4}}>Bet</span>
             {BETS.map(b => (
-              <button key={b} onClick={() => { if (!spinning) setBet(b) }}
+              <button key={b} onClick={() => { if (!spinning) { playChip(); setBet(b) } }}
                 style={{
                   padding:'10px 20px',borderRadius:999,
                   fontFamily:'var(--fs-head)',fontWeight:700,fontSize:13,letterSpacing:'.06em',

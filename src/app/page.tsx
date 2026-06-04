@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Suspense } from 'react'
+import { setMuted } from '@/lib/casino-sounds'
 
 interface Profile {
   id: string
@@ -52,12 +53,17 @@ function LobbyContent() {
   const [siteUrl, setSiteUrl] = useState('')
   const [copied, setCopied] = useState(false)
   const [toast, setToast] = useState<{msg:string,kind:string}|null>(null)
+  const [muted, setMutedUI] = useState(false)
   const searchParams = useSearchParams()
   const router = useRouter()
   const supabase = createClient()
 
   const showToast = useCallback((msg: string, kind = '') => {
     setToast({ msg, kind })
+  }, [])
+
+  useEffect(() => {
+    try { setMutedUI(localStorage.getItem('casinoMuted') === '1') } catch {}
   }, [])
 
   useEffect(() => {

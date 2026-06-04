@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { playChip, playWin, playLose, startTension, stopTension, setMuted } from '@/lib/casino-sounds'
 
 const RED = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36])
 const WHEEL = [0,32,15,19,4,21,2,25,17,34,6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9,22,18,29,7,28,12,35,3,26]
@@ -41,11 +42,16 @@ export default function RoulettePage() {
   const [showHelp, setShowHelp] = useState(false)
   const [inviteUrl, setInviteUrl] = useState('')
   const [loading, setLoading] = useState(true)
+  const [muted, setMutedUI] = useState(false)
   const wheelRef = useRef<HTMLDivElement>(null)
   const ballRef = useRef<HTMLDivElement>(null)
   const rotRef = useRef(0)
   const router = useRouter()
   const supabase = createClient()
+
+  useEffect(() => {
+    try { setMutedUI(localStorage.getItem('casinoMuted') === '1') } catch {}
+  }, [])
 
   useEffect(() => {
     async function init() {
@@ -68,6 +74,7 @@ export default function RoulettePage() {
   function place(key: string) {
     if (spinning) return
     if (bal < chip) { showToast('Not enough chips'); return }
+    playChip()
     setBal(b => b - chip)
     setBets(b => ({ ...b, [key]: (b[key]||0)+chip }))
     setWin(null)
@@ -108,6 +115,7 @@ export default function RoulettePage() {
   async function spin() {
     if (spinning || total === 0) return
     setSpinning(true); setWin(null)
+    startTension()
     const idx = Math.floor(Math.random() * WHEEL.length)
     const w = WHEEL[idx]
     const target = 360*6 - idx*SEG - rotRef.current%360
@@ -121,10 +129,12 @@ export default function RoulettePage() {
       const wagered = total
       Object.keys(bets).forEach(k => { if (betWins(k, w)) winnings += bets[k]*mult(k) })
 
+      stopTension()
       setBal(b => b + winnings)
       const net = winnings - wagered
       setWin({ num: w, net })
       setSpinning(false)
+      if (net > 0) playWin(); else if (net < 0) playLose()
       const label = w===0?'Zero':(colOf(w)==='red'?'Red ':'Black ')+w
       showToast(label+(net>0?'  +'+fmt(net):net<0?'  −'+fmt(wagered):''), net>0?'win':(net<0?'lose':''))
       setBets({})
@@ -179,6 +189,12 @@ export default function RoulettePage() {
         <div className="right">
           <button className="btn btn-sm btn-ghost" onClick={() => setShowHelp(true)}>How to Play</button>
           <button className="btn btn-sm btn-ghost" onClick={() => setShowInvite(true)}>Invite</button>
+          <button
+            className="btn btn-sm btn-ghost"
+            style={{fontSize:18, padding:'8px 13px', lineHeight:1, minWidth:0}}
+            onClick={() => { const next = !muted; setMutedUI(next); setMuted(next) }}
+            title={muted ? 'Unmute' : 'Mute'}
+          >{muted ? '🔇' : '🔊'}</button>
           <div className="balance">
             <div className="coin">H</div>
             <span className="amt tabnum">{fmt(bal)}</span>

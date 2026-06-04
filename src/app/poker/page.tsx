@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { PokerGame, BB, fmt, fmtShort, GameSnapshot, LegalActions } from '@/lib/poker-game'
 import type { Card } from '@/lib/poker-engine'
+import { playDeal, playChip, playWin, playLose, startTension, stopTension, isMuted, setMuted } from '@/lib/casino-sounds'
 
 const SEATS = [
   { name:'You', avatar:'V' },
@@ -99,6 +100,11 @@ export default function PokerPage() {
   const [dealing, setDealing] = useState(false)
   const [bal, setBal] = useState(100000)
   const [toast, setToast] = useState<{msg:string,kind:string}|null>(null)
+  const [muted, setMutedUI] = useState(false)
+
+  useEffect(() => {
+    try { setMutedUI(isMuted()) } catch { /* ignore */ }
+  }, [])
   const [inviteUrl, setInviteUrl] = useState('')
   const [loading, setLoading] = useState(true)
   const autoNext = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -135,6 +141,7 @@ export default function PokerPage() {
 
   const endHand = useCallback(() => {
     sync()
+    stopTension()
     if (autoNext.current) clearTimeout(autoNext.current)
     autoNext.current = setTimeout(() => startHand(), 4200)
   }, [sync])
@@ -167,7 +174,9 @@ export default function PokerPage() {
     setDealing(true)
     g.startHand()
     sync()
-    await sleep(700)
+    // Play deal sounds as cards are "distributed"
+    for (let i = 0; i < 2; i++) { playDeal(); await sleep(200) }
+    await sleep(300)
     setDealing(false)
     if (g.street === 'idle') { sync(); return }
     drive()
@@ -177,6 +186,7 @@ export default function PokerPage() {
     const g = gameRef.current
     if (!g) return
     if (g.players[g.toAct] && !g.players[g.toAct].isYou) return
+    if (type === 'call' || type === 'raise' || type === 'allin') playChip()
     const ev = g.apply(type, amount)
     sync()
     if (ev === 'showdown' || ev === 'win') { endHand() }
@@ -200,6 +210,17 @@ export default function PokerPage() {
       if (legal && legal.canRaise) setRaiseTo(legal.minRaiseTo)
     }
   }, [snap?.toAct, snap?.street])
+
+  // Play win/lose sounds and start tension on showdown
+  useEffect(() => {
+    if (!snap) return
+    if (snap.street === 'showdown') startTension()
+    if (snap.street === 'handover' && snap.lastResult) {
+      stopTension()
+      const youWon = snap.lastResult.winners.includes(0)
+      if (youWon) playWin(); else playLose()
+    }
+  }, [snap?.street, snap?.handNo])
 
   // Log session when chips change significantly (on hand end)
   useEffect(() => {
@@ -246,6 +267,12 @@ export default function PokerPage() {
         <div className="right">
           <button className="btn btn-sm btn-ghost" onClick={() => setShowHelp(true)}>How to Play</button>
           <button className="btn btn-sm btn-ghost" onClick={() => setShowInvite(true)}>Invite</button>
+          <button
+            className="btn btn-sm btn-ghost"
+            style={{padding:'9px 13px',fontSize:16}}
+            onClick={() => { const next = !muted; setMutedUI(next); setMuted(next) }}
+            title={muted ? 'Unmute' : 'Mute'}
+          >{muted ? '🔇' : '🔊'}</button>
           <div className="balance">
             <div className="coin">H</div>
             <span className="amt tabnum">{fmt(bal)}</span>

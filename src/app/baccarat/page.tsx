@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { playDeal, playWin, playLose, startTension, stopTension, setMuted } from '@/lib/casino-sounds'
 
 const SUITS = ['♠','♥','♦','♣']
 const RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K']
@@ -81,6 +82,7 @@ export default function BaccaratPage() {
   const [toast, setToast] = useState<{msg:string,kind:string}|null>(null)
   const [loading, setLoading] = useState(true)
   const [showHelp, setShowHelp] = useState(false)
+  const [muted, setMutedUI] = useState(false)
   const deckRef = { current: shuffle(freshDeck()) }
   const router = useRouter()
   const supabase = createClient()
@@ -89,6 +91,10 @@ export default function BaccaratPage() {
     if (deckRef.current.length < 10) deckRef.current = shuffle(freshDeck())
     return deckRef.current.pop()!
   }
+
+  useEffect(() => {
+    try { setMutedUI(localStorage.getItem('casinoMuted') === '1') } catch {}
+  }, [])
 
   useEffect(() => {
     async function init() {
@@ -119,12 +125,12 @@ export default function BaccaratPage() {
     setPhase('deal')
     setPlayerCards([]); setBankerCards([])
     setWinner(null); setHideThird(false)
-
+    startTension()
     // Initial deal: P B P B
-    const p1 = draw(); await sleep(300); setPlayerCards([p1])
-    const b1 = draw(); await sleep(300); setBankerCards([b1])
-    const p2 = draw(); await sleep(300); setPlayerCards([p1, p2])
-    const b2 = draw(); await sleep(300); setBankerCards([b1, b2])
+    const p1 = draw(); await sleep(300); playDeal(); setPlayerCards([p1])
+    const b1 = draw(); await sleep(300); playDeal(); setBankerCards([b1])
+    const p2 = draw(); await sleep(300); playDeal(); setPlayerCards([p1, p2])
+    const b2 = draw(); await sleep(300); playDeal(); setBankerCards([b1, b2])
     await sleep(500)
 
     let pCards = [p1, p2], bCards = [b1, b2]
@@ -142,7 +148,7 @@ export default function BaccaratPage() {
     if (pt <= 5) {
       p3 = draw(); pCards = [...pCards, p3]
       setHideThird(true); await sleep(200)
-      setPlayerCards(pCards); setHideThird(false); await sleep(400)
+      playDeal(); setPlayerCards(pCards); setHideThird(false); await sleep(400)
     }
 
     // Banker draws based on standard rules
@@ -160,7 +166,7 @@ export default function BaccaratPage() {
     }
     if (bankerDraws) {
       const b3 = draw(); bCards = [...bCards, b3]
-      setBankerCards(bCards); await sleep(500)
+      playDeal(); setBankerCards(bCards); await sleep(500)
     }
 
     await sleep(300)
@@ -181,6 +187,8 @@ export default function BaccaratPage() {
     }
     const net = payout - wagered
     setBal(b => b + payout)
+    stopTension()
+    if (net > 0) playWin(); else if (net < 0) playLose()
     setPhase('done')
 
     const msg = w === 'tie' ? `Tie — ${pt}:${bt}` : `${w.charAt(0).toUpperCase()+w.slice(1)} wins ${pt}:${bt}`
@@ -225,6 +233,12 @@ export default function BaccaratPage() {
         </div>
         <div style={{display:'flex',alignItems:'center',gap:12}}>
           <button className="btn btn-sm btn-ghost" onClick={() => setShowHelp(true)}>How to Play</button>
+          <button
+            className="btn btn-sm btn-ghost"
+            style={{fontSize:18, padding:'8px 13px', lineHeight:1, minWidth:0}}
+            onClick={() => { const next = !muted; setMutedUI(next); setMuted(next) }}
+            title={muted ? 'Unmute' : 'Mute'}
+          >{muted ? '🔇' : '🔊'}</button>
           <div className="balance">
             <div className="coin">H</div>
             <span className="amt tabnum">{fmt(bal)}</span>
