@@ -296,3 +296,120 @@ function scheduleBeat(): void {
     }, 520 - 50)
   } catch { /* ignore */ }
 }
+
+// ─── Lobby background music: slow lounge jazz loop ──────────────────────────
+// Am7 → Dm7 → Fmaj7 → E7, 86 BPM, melody every other loop
+
+let _lobbyActive = false
+
+export function startLobbyMusic(): void {
+  if (_lobbyActive) return
+  _lobbyActive = true
+  _lobbyLoop(0, 0)
+}
+
+export function stopLobbyMusic(): void {
+  _lobbyActive = false
+}
+
+const _BPM = 86
+const _BEAT = 60 / _BPM
+const _BAR  = _BEAT * 4
+
+const _CHORDS = [
+  { bass: 110.00, pads: [220.00, 261.63, 329.63, 392.00] }, // Am7
+  { bass:  73.42, pads: [146.83, 174.61, 220.00, 261.63] }, // Dm7
+  { bass:  87.31, pads: [174.61, 220.00, 261.63, 329.63] }, // Fmaj7
+  { bass:  82.41, pads: [164.81, 207.65, 246.94, 293.66] }, // E7
+]
+
+// A-minor quarter-note melody (4 notes × 4 bars), plays every other loop
+const _MELODY = [
+  329.63, 293.66, 261.63, 220.00,  // bar 1: E4 D4 C4 A3
+  220.00, 261.63, 293.66, 349.23,  // bar 2: A3 C4 D4 F4
+  329.63, 293.66, 261.63, 220.00,  // bar 3: E4 D4 C4 A3
+  246.94, 293.66, 329.63, 220.00,  // bar 4: B3 D4 E4 A3
+]
+
+function _lNote(ctx: AudioContext, dst: AudioNode, type: OscillatorType, freq: number, t: number, dur: number, vol: number): void {
+  const osc = ctx.createOscillator()
+  osc.type = type
+  osc.frequency.value = freq
+  const g = ctx.createGain()
+  const att = Math.min(0.1, dur * 0.12)
+  g.gain.setValueAtTime(0, t)
+  g.gain.linearRampToValueAtTime(vol, t + att)
+  g.gain.setValueAtTime(vol * 0.72, t + dur * 0.55)
+  g.gain.linearRampToValueAtTime(0, t + dur)
+  osc.connect(g); g.connect(dst)
+  osc.start(t); osc.stop(t + dur + 0.05)
+}
+
+function _lHat(ctx: AudioContext, dst: AudioNode, t: number): void {
+  const len = Math.floor(ctx.sampleRate * 0.032)
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate)
+  const d = buf.getChannelData(0)
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / len * 28)
+  const src = ctx.createBufferSource()
+  src.buffer = buf
+  const hp = ctx.createBiquadFilter()
+  hp.type = 'highpass'; hp.frequency.value = 7200
+  const g = ctx.createGain(); g.gain.value = 0.048
+  src.connect(hp); hp.connect(g); g.connect(dst)
+  src.start(t)
+}
+
+function _lobbyLoop(loop: number, startTime: number): void {
+  if (!_lobbyActive) return
+  try {
+    const r = getCtx()
+    if (!r) return
+    const { ctx, master } = r
+    const t0 = Math.max(startTime, ctx.currentTime + 0.01)
+    const hasMelody = loop % 2 === 0
+
+    for (let bar = 0; bar < 4; bar++) {
+      const bt = t0 + bar * _BAR
+      const chord = _CHORDS[bar]
+
+      // Bass: sine, one note per bar
+      _lNote(ctx, master, 'sine', chord.bass, bt, _BAR * 0.82, 0.20)
+
+      // Pad: four triangle chord tones
+      chord.pads.forEach((f, i) => {
+        _lNote(ctx, master, 'triangle', f, bt + 0.07, _BAR * 0.90, 0.030 - i * 0.005)
+      })
+
+      // Hi-hat on beats 2 & 4
+      _lHat(ctx, master, bt + _BEAT)
+      _lHat(ctx, master, bt + _BEAT * 3)
+
+      // Kick on bar 1 beat 1 only
+      if (bar === 0) {
+        const k = ctx.createOscillator()
+        k.type = 'sine'
+        k.frequency.setValueAtTime(75, bt)
+        k.frequency.exponentialRampToValueAtTime(28, bt + 0.12)
+        const kg = ctx.createGain()
+        kg.gain.setValueAtTime(0.16, bt)
+        kg.gain.exponentialRampToValueAtTime(0.001, bt + 0.16)
+        k.connect(kg); kg.connect(master)
+        k.start(bt); k.stop(bt + 0.18)
+      }
+
+      // Melody (every other loop)
+      if (hasMelody) {
+        for (let beat = 0; beat < 4; beat++) {
+          const freq = _MELODY[bar * 4 + beat]
+          _lNote(ctx, master, 'sine', freq, bt + beat * _BEAT + 0.02, _BEAT * 0.68, 0.055)
+        }
+      }
+    }
+
+    // Schedule next loop with 80ms look-ahead
+    const nextStart = t0 + _BAR * 4
+    setTimeout(() => {
+      if (_lobbyActive) _lobbyLoop(loop + 1, nextStart)
+    }, Math.max(10, (nextStart - ctx.currentTime - 0.08) * 1000))
+  } catch { /* ignore */ }
+}

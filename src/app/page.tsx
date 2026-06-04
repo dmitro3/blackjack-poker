@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Suspense } from 'react'
-import { setMuted } from '@/lib/casino-sounds'
+import { setMuted, isMuted, startLobbyMusic, stopLobbyMusic } from '@/lib/casino-sounds'
 
 interface Profile {
   id: string
@@ -64,6 +64,16 @@ function LobbyContent() {
 
   useEffect(() => {
     try { setMutedUI(localStorage.getItem('casinoMuted') === '1') } catch {}
+  }, [])
+
+  // Start lobby music on first user interaction (browser autoplay policy)
+  useEffect(() => {
+    const start = () => { if (!isMuted()) startLobbyMusic() }
+    document.addEventListener('click', start, { once: true })
+    return () => {
+      document.removeEventListener('click', start)
+      stopLobbyMusic()
+    }
   }, [])
 
   useEffect(() => {
@@ -173,7 +183,7 @@ function LobbyContent() {
           <button
             className="btn btn-sm btn-ghost"
             style={{fontSize:18, padding:'8px 13px', lineHeight:1, minWidth:0}}
-            onClick={() => { const next = !muted; setMutedUI(next); setMuted(next) }}
+            onClick={() => { const next = !muted; setMutedUI(next); setMuted(next); if (next) stopLobbyMusic(); else startLobbyMusic() }}
             title={muted ? 'Unmute' : 'Mute'}
           >{muted ? '🔇' : '🔊'}</button>
           <div className="balance">
