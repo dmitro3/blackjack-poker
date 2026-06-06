@@ -741,7 +741,7 @@ export default function BlackjackPage() {
         .bet-circle { width:88px;height:88px;border-radius:50%;border:2px dashed rgba(217,182,90,.5);display:flex;align-items:center;justify-content:center;flex-direction:column;background:radial-gradient(circle,rgba(217,182,90,.08),transparent); }
         .bet-circle .lbl { font-size:9px;letter-spacing:.2em;color:var(--cream-faint);text-transform:uppercase; }
         .bet-circle .amt { font-family:var(--fs-head);font-weight:800;font-size:22px;color:var(--gold-l); }
-        .chip-tray { display:flex;gap:12px; }
+        .chip-tray { display:flex;gap:12px;flex-wrap:wrap;justify-content:center; }
         .chip-tray .chip { width:64px;height:64px;font-size:15px; }
         .chip-tray .chip.dis { filter:grayscale(.6) brightness(.55);cursor:not-allowed;pointer-events:none; }
         .actions { display:flex;gap:12px;flex-wrap:wrap;justify-content:center;max-width:420px; }
@@ -756,6 +756,16 @@ export default function BlackjackPage() {
         .modal .x { position:absolute;top:16px;right:18px;background:none;border:none;color:var(--cream-faint);font-size:24px;cursor:pointer;line-height:1; }
         .modal .x:hover { color:var(--gold-l); }
         .seatnote { margin-top:18px;font-size:12px;color:var(--cream-faint);line-height:1.5;border-top:1px solid rgba(217,182,90,.15);padding-top:14px; }
+        @media (max-width: 640px) {
+          .topbar { padding: 10px 14px !important; gap: 8px !important; }
+          .topbar .title-c .t { font-size: 18px !important; }
+          .topbar .title-c .s { display: none; }
+          .topbar .right { gap: 6px !important; }
+          .deck-ctrl { padding: 10px 14px 16px !important; gap: 14px !important; flex-wrap: wrap; justify-content: center; }
+          .hand { gap: 6px !important; min-height: 95px !important; }
+          .felt-area { border-radius: 18px !important; margin: 0 10px 10px !important; }
+          .result-banner { font-size: 20px !important; }
+        }
       `}</style>
     </div>
   )

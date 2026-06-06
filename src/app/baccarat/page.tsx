@@ -223,15 +223,15 @@ export default function BaccaratPage() {
     <div style={{minHeight:'100vh',display:'flex',flexDirection:'column',background:'radial-gradient(120% 80% at 50% -10%, #241f15 0%, #13110b 45%, #0b0a07 100%)'}}>
       {toast && <Toast msg={toast.msg} kind={toast.kind} onDone={() => setToast(null)} />}
 
-      <header style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 24px',background:'linear-gradient(180deg,rgba(11,10,7,.95),rgba(11,10,7,.2))'}}>
+      <header className="bac-topbar" style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 24px',background:'linear-gradient(180deg,rgba(11,10,7,.95),rgba(11,10,7,.2))'}}>
         <Link href="/" style={{display:'flex',alignItems:'center',gap:10,textDecoration:'none',color:'var(--cream-dim)',fontFamily:'var(--fs-head)',fontSize:13,letterSpacing:'.12em',textTransform:'uppercase',padding:'9px 16px',borderRadius:999,border:'1px solid rgba(217,182,90,.25)'}}>
           ← Lobby
         </Link>
         <div style={{textAlign:'center'}}>
-          <div className="gold-text" style={{fontFamily:'var(--fs-display)',fontWeight:900,fontSize:20,letterSpacing:'.14em'}}>BACCARAT</div>
-          <div style={{fontFamily:'var(--fs-head)',fontSize:9,letterSpacing:'.4em',color:'var(--cream-faint)'}}>PUNTO BANCO · MINI TABLE</div>
+          <div className="gold-text bac-title-t" style={{fontFamily:'var(--fs-display)',fontWeight:900,fontSize:20,letterSpacing:'.14em'}}>BACCARAT</div>
+          <div className="bac-title-s" style={{fontFamily:'var(--fs-head)',fontSize:9,letterSpacing:'.4em',color:'var(--cream-faint)'}}>PUNTO BANCO · MINI TABLE</div>
         </div>
-        <div style={{display:'flex',alignItems:'center',gap:12}}>
+        <div className="bac-right" style={{display:'flex',alignItems:'center',gap:12}}>
           <button className="btn btn-sm btn-ghost" onClick={() => setShowHelp(true)}>How to Play</button>
           <button
             className="btn btn-sm btn-ghost"
@@ -248,7 +248,7 @@ export default function BaccaratPage() {
 
       <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',padding:'24px 24px 32px',gap:24}}>
         {/* Felt area */}
-        <div style={{width:'100%',maxWidth:680,background:'radial-gradient(120% 100% at 50% 0%,#137a4a 0%,#0c5a37 38%,#073b25 100%)',borderRadius:28,padding:32,border:'1px solid rgba(217,182,90,.3)',boxShadow:'0 20px 60px rgba(0,0,0,.6),inset 0 0 80px rgba(0,0,0,.3)',display:'flex',flexDirection:'column',gap:28}}>
+        <div className="bac-felt" style={{width:'100%',maxWidth:680,background:'radial-gradient(120% 100% at 50% 0%,#137a4a 0%,#0c5a37 38%,#073b25 100%)',borderRadius:28,padding:32,border:'1px solid rgba(217,182,90,.3)',boxShadow:'0 20px 60px rgba(0,0,0,.6),inset 0 0 80px rgba(0,0,0,.3)',display:'flex',flexDirection:'column',gap:28}}>
 
           {/* Banker hand */}
           <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:12}}>
@@ -299,11 +299,11 @@ export default function BaccaratPage() {
         </div>
 
         {/* Controls */}
-        <div style={{width:'100%',maxWidth:680}}>
+        <div className="bac-controls" style={{width:'100%',maxWidth:680}}>
           {phase === 'bet' && (
             <div style={{display:'flex',flexDirection:'column',gap:16}}>
               {/* Bet side selector */}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12}}>
+              <div className="bac-bet-grid" style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12}}>
                 {([['player','Player','1:1'],['tie','Tie','8:1'],['banker','Banker','0.95:1']] as [BetSide,string,string][]).map(([side,label,odds]) => (
                   <button key={side} onClick={() => chooseSide(side)} style={{
                     padding:'20px 12px',borderRadius:18,textAlign:'center',cursor:'pointer',
@@ -356,7 +356,7 @@ export default function BaccaratPage() {
         </div>
 
         {/* Odds reference */}
-        <div style={{display:'flex',gap:20,fontSize:12,color:'var(--cream-faint)',fontFamily:'var(--fs-head)',letterSpacing:'.1em'}}>
+        <div className="bac-odds" style={{display:'flex',gap:20,fontSize:12,color:'var(--cream-faint)',fontFamily:'var(--fs-head)',letterSpacing:'.1em'}}>
           <span>Player 1:1</span>
           <span style={{opacity:.4}}>·</span>
           <span>Banker 0.95:1 (5% commission)</span>
@@ -399,6 +399,16 @@ export default function BaccaratPage() {
 
       <style>{`
         .card { animation: dealIn .4s cubic-bezier(.2,.9,.25,1) both; }
+        @media (max-width: 640px) {
+          .bac-topbar { padding: 10px 14px !important; }
+          .bac-topbar .bac-title-t { font-size: 16px !important; }
+          .bac-topbar .bac-title-s { display: none; }
+          .bac-topbar .bac-right { gap: 8px !important; }
+          .bac-felt { padding: 18px 14px !important; }
+          .bac-controls { padding: 0 14px 24px !important; }
+          .bac-bet-grid { gap: 8px !important; }
+          .bac-odds { flex-wrap: wrap !important; gap: 10px !important; }
+        }
       `}</style>
     </div>
   )

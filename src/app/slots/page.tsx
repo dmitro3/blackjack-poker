@@ -59,7 +59,7 @@ function Reel({ sym, spinning, delay }: { sym: string; spinning: boolean; delay:
   }, [spinning, sym, delay])
 
   return (
-    <div style={{
+    <div className="reel-window" style={{
       width: 150, height: 180, display:'flex', alignItems:'center', justifyContent:'center',
       background:'linear-gradient(180deg,#1a1306,#0d0a04)',
       borderRadius:18,
@@ -169,13 +169,13 @@ export default function SlotsPage() {
     <div style={{minHeight:'100vh',display:'flex',flexDirection:'column',background:'radial-gradient(120% 80% at 50% -10%, #241f15 0%, #13110b 45%, #0b0a07 100%)'}}>
       {toast && <Toast msg={toast.msg} kind={toast.kind} onDone={() => setToast(null)} />}
 
-      <header style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 24px',background:'linear-gradient(180deg,rgba(11,10,7,.95),rgba(11,10,7,.2))'}}>
+      <header className="topbar" style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 24px',background:'linear-gradient(180deg,rgba(11,10,7,.95),rgba(11,10,7,.2))'}}>
         <Link href="/" style={{display:'flex',alignItems:'center',gap:10,textDecoration:'none',color:'var(--cream-dim)',fontFamily:'var(--fs-head)',fontSize:13,letterSpacing:'.12em',textTransform:'uppercase',padding:'9px 16px',borderRadius:999,border:'1px solid rgba(217,182,90,.25)'}}>
           ← Lobby
         </Link>
         <div style={{textAlign:'center'}}>
           <div className="gold-text" style={{fontFamily:'var(--fs-display)',fontWeight:900,fontSize:20,letterSpacing:'.14em'}}>SLOTS</div>
-          <div style={{fontFamily:'var(--fs-head)',fontSize:9,letterSpacing:'.4em',color:'var(--cream-faint)'}}>CLASSIC THREE REEL</div>
+          <div className="slots-subtitle" style={{fontFamily:'var(--fs-head)',fontSize:9,letterSpacing:'.4em',color:'var(--cream-faint)'}}>CLASSIC THREE REEL</div>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:12}}>
           <button className="btn btn-sm btn-ghost" onClick={() => setShowHelp(true)}>How to Play</button>
@@ -194,7 +194,7 @@ export default function SlotsPage() {
 
       <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:24,gap:32}}>
         {/* Machine cabinet */}
-        <div style={{
+        <div className="cabinet" style={{
           background:'linear-gradient(180deg,#231b0f,#160f07)',
           border:'2px solid rgba(217,182,90,.5)',borderRadius:36,
           padding:'36px 48px 44px',
@@ -216,7 +216,7 @@ export default function SlotsPage() {
               borderRadius:12,padding:'10px 32px',
               boxShadow:'inset 0 0 20px rgba(0,0,0,.5), 0 0 30px rgba(217,182,90,.1)',
             }}>
-              <div className="gold-text" style={{fontFamily:'var(--fs-display)',fontWeight:900,fontSize:34,letterSpacing:'.35em'}}>
+              <div className="gold-text marquee-text" style={{fontFamily:'var(--fs-display)',fontWeight:900,fontSize:34,letterSpacing:'.35em'}}>
                 HOUSE SLOTS
               </div>
             </div>
@@ -243,7 +243,7 @@ export default function SlotsPage() {
             </div>
             {/* Win line across reels */}
             <div style={{position:'absolute',top:'50%',left:0,right:0,height:2,background:`linear-gradient(90deg,transparent,rgba(217,182,90,${lastNet !== null && lastNet > 0 && !spinning ? '.9' : '.25'}),transparent)`,transform:'translateY(-50%)',pointerEvents:'none',transition:'.3s'}}/>
-            <div style={{display:'flex',gap:16,justifyContent:'center',alignItems:'center'}}>
+            <div className="cabinet-inner" style={{display:'flex',gap:16,justifyContent:'center',alignItems:'center'}}>
               <Reel sym={syms[0]} spinning={spinning} delay={0} />
               <Reel sym={syms[1]} spinning={spinning} delay={350} />
               <Reel sym={syms[2]} spinning={spinning} delay={700} />
@@ -270,7 +270,7 @@ export default function SlotsPage() {
           </div>
 
           {/* Bet selector */}
-          <div style={{display:'flex',alignItems:'center',gap:8,justifyContent:'center',marginBottom:24}}>
+          <div className="bet-row" style={{display:'flex',alignItems:'center',gap:8,justifyContent:'center',marginBottom:24}}>
             <span style={{fontFamily:'var(--fs-head)',fontSize:11,letterSpacing:'.25em',color:'var(--cream-faint)',textTransform:'uppercase',marginRight:4}}>Bet</span>
             {BETS.map(b => (
               <button key={b} onClick={() => { if (!spinning) { playChip(); setBet(b) } }}
@@ -291,7 +291,7 @@ export default function SlotsPage() {
           {/* Spin button */}
           <div style={{display:'flex',gap:14,justifyContent:'center'}}>
             <button
-              className="btn"
+              className="btn spin-btn"
               style={{minWidth:220,fontSize:20,padding:'18px 48px',letterSpacing:'.15em',opacity: spinning || bal < bet ? .5 : 1}}
               disabled={spinning || bal < bet}
               onClick={spin}
@@ -341,6 +341,19 @@ export default function SlotsPage() {
           </div>
         </div>
       </div>
+
+      <style>{`
+        @media (max-width: 640px) {
+          .topbar { padding: 10px 14px !important; }
+          .slots-subtitle { display: none; }
+          .reel-window { width: 95px !important; height: 114px !important; }
+          .cabinet { padding: 20px 16px 24px !important; }
+          .cabinet-inner { gap: 10px !important; }
+          .marquee-text { font-size: 20px !important; letter-spacing: .18em !important; }
+          .spin-btn { min-width: 160px !important; font-size: 16px !important; padding: 14px 28px !important; }
+          .bet-row { gap: 6px !important; flex-wrap: wrap !important; justify-content: center !important; }
+        }
+      `}</style>
 
       {/* How to Play modal */}
       {showHelp && (

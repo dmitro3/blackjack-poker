@@ -389,6 +389,21 @@ export default function RoulettePage() {
         .invite-field input { flex:1;background:rgba(0,0,0,.4);border:1px solid rgba(217,182,90,.3);border-radius:10px;padding:0 14px;color:var(--gold-l);font-size:13px;height:46px; }
         .modal .x { position:absolute;top:16px;right:18px;background:none;border:none;color:var(--cream-faint);font-size:24px;cursor:pointer;line-height:1; }
         .seatnote { margin-top:18px;font-size:12px;color:var(--cream-faint);line-height:1.5;border-top:1px solid rgba(217,182,90,.15);padding-top:14px; }
+        @media (max-width: 640px) {
+          .topbar { padding: 10px 14px !important; }
+          .topbar .title-c .t { font-size: 16px !important; }
+          .topbar .title-c .s { display: none; }
+          .topbar .right { gap: 6px !important; flex-wrap: wrap; justify-content: flex-end; }
+          .stage { grid-template-columns: 1fr !important; gap: 0 !important; padding: 8px !important; overflow-y: auto; }
+          .wheel-side { padding-bottom: 8px !important; }
+          .wheel-housing { width: 240px !important; height: 240px !important; }
+          .board { min-width: unset !important; width: 100% !important; overflow-x: auto; }
+          .board-side { padding: 0 8px 8px !important; }
+          .numbers { grid-template-rows: repeat(3, 32px) !important; }
+          .lower .cell { height: 30px !important; font-size: 9px !important; }
+          .cell { font-size: 10px !important; }
+          .table-wrap { height: auto !important; min-height: 100vh; overflow-y: auto; }
+        }
       `}</style>
     </div>
   )

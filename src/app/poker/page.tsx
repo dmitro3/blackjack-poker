@@ -502,6 +502,21 @@ export default function PokerPage() {
         .invite-field input { flex:1;background:rgba(0,0,0,.4);border:1px solid rgba(217,182,90,.3);border-radius:10px;padding:0 14px;color:var(--gold-l);font-size:13px;height:46px; }
         .modal .x { position:absolute;top:16px;right:18px;background:none;border:none;color:var(--cream-faint);font-size:24px;cursor:pointer;line-height:1; }
         .seatnote { margin-top:18px;font-size:12px;color:var(--cream-faint);line-height:1.5;border-top:1px solid rgba(217,182,90,.15);padding-top:14px; }
+        @media (max-width: 640px) {
+          .topbar { padding: 10px 14px !important; }
+          .topbar .title-c .t { font-size: 16px !important; }
+          .topbar .title-c .s { display: none; }
+          .topbar .right { gap: 6px !important; flex-wrap: wrap; justify-content: flex-end; max-width: 55vw; }
+          .felt-stage { margin: 8px 8px 4px !important; }
+          .seat { width: 130px !important; }
+          .seat .pod { padding: 6px 8px !important; }
+          .seat .nm { font-size: 10px !important; }
+          .raise-box { width: 220px !important; }
+          .actions .btn { min-width: 90px !important; font-size: 12px !important; padding: 10px 12px !important; }
+          .dealer-plaque { font-size: 10px !important; }
+          .board { gap: 6px !important; }
+          .control-bar { flex-wrap: wrap; gap: 10px !important; padding: 10px 14px 14px !important; min-height: unset !important; }
+        }
       `}</style>
     </div>
   )

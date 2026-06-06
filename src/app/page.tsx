@@ -161,7 +161,7 @@ function LobbyContent() {
         ))}
       </div>
 
-      <header style={{
+      <header className="lobby-header" style={{
         position:'sticky',top:0,zIndex:40,display:'flex',alignItems:'center',
         justifyContent:'space-between',padding:'18px 28px',
         background:'linear-gradient(180deg, rgba(11,10,7,.92), rgba(11,10,7,.4) 70%, transparent)',
@@ -175,11 +175,11 @@ function LobbyContent() {
             boxShadow:'inset 0 1px 0 rgba(255,255,255,.6), inset 0 -3px 6px var(--gold-deep), 0 4px 12px rgba(0,0,0,.5)',
           }}>H</div>
           <div>
-            <div className="gold-text" style={{fontFamily:'var(--fs-display)',fontWeight:900,fontSize:23,letterSpacing:'.14em'}}>HOUSETABLES</div>
+            <div className="gold-text lobby-header-logo" style={{fontFamily:'var(--fs-display)',fontWeight:900,fontSize:23,letterSpacing:'.14em'}}>HOUSETABLES</div>
             <div style={{fontFamily:'var(--fs-head)',fontSize:9,letterSpacing:'.42em',color:'var(--cream-faint)',marginTop:2}}>PRIVATE CARD ROOM</div>
           </div>
         </Link>
-        <div style={{display:'flex',alignItems:'center',gap:14}}>
+        <div className="lobby-header-right" style={{display:'flex',alignItems:'center',gap:14}}>
           <button
             className="btn btn-sm btn-ghost"
             style={{fontSize:18, padding:'8px 13px', lineHeight:1, minWidth:0}}
@@ -197,7 +197,7 @@ function LobbyContent() {
         </div>
       </header>
 
-      <div style={{maxWidth:1200,margin:'0 auto',padding:'0 28px 80px',position:'relative',zIndex:1}}>
+      <div className="lobby-container" style={{maxWidth:1200,margin:'0 auto',padding:'0 28px 80px',position:'relative',zIndex:1}}>
         <section style={{textAlign:'center',padding:'54px 0 30px',position:'relative'}}>
           <div style={{fontFamily:'var(--fs-head)',letterSpacing:'.5em',fontSize:12,color:'var(--gold)',textTransform:'uppercase',marginBottom:22}}>
             Members Only · Est. MMXXVI
@@ -216,7 +216,7 @@ function LobbyContent() {
         </section>
 
         {/* Game cards */}
-        <section style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:24,marginTop:46}}>
+        <section className="lobby-grid" style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:24,marginTop:46}}>
           {/* Blackjack */}
           <Link href="/blackjack" style={{
             gridColumn:'span 2',position:'relative',borderRadius:'var(--radius-lg)',overflow:'hidden',cursor:'pointer',
@@ -430,7 +430,7 @@ function LobbyContent() {
         </section>
 
         {/* Lower panels */}
-        <section style={{display:'grid',gridTemplateColumns:'1.3fr 1fr',gap:24,marginTop:34}}>
+        <section className="lobby-bottom" style={{display:'grid',gridTemplateColumns:'1.3fr 1fr',gap:24,marginTop:34}}>
           {/* Invite panel */}
           <div className="gilt" style={{padding:30,borderRadius:'var(--radius-lg)'}}>
             <h2 className="gold-text" style={{fontFamily:'var(--fs-head)',fontWeight:700,fontSize:22,margin:'0 0 6px',letterSpacing:'.03em'}}>
@@ -543,6 +543,15 @@ function LobbyContent() {
         @keyframes spinSlow { to { transform: rotate(360deg); } }
         @keyframes pulseLive { 0% { box-shadow: 0 0 0 0 rgba(58,208,122,.6); } 70% { box-shadow: 0 0 0 7px rgba(58,208,122,0); } }
         .game:hover { transform: translateY(-8px); border-color: var(--gold) !important; box-shadow: 0 28px 70px rgba(0,0,0,.6), 0 0 0 1px rgba(217,182,90,.4) !important; }
+        @media (max-width: 640px) {
+          .lobby-grid { grid-template-columns: 1fr 1fr !important; }
+          .lobby-grid > * { grid-column: span 1 !important; }
+          .lobby-bottom { grid-template-columns: 1fr !important; }
+          .lobby-container { padding: 0 12px 24px !important; }
+          .lobby-header-logo { font-size: 17px !important; letter-spacing: .08em !important; }
+          .lobby-header { flex-wrap: wrap; gap: 8px !important; padding: 12px 14px !important; }
+          .lobby-header-right { gap: 8px !important; flex-wrap: wrap; justify-content: flex-end; }
+        }
       `}</style>
     </div>
   )
