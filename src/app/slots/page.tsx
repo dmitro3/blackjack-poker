@@ -95,6 +95,7 @@ export default function SlotsPage() {
   const [loading, setLoading] = useState(true)
   const [showHelp, setShowHelp] = useState(false)
   const [autoSpin, setAutoSpin] = useState(false)
+  const [reelGap, setReelGap] = useState(350)
   const [muted, setMutedUI] = useState(false)
   const autoRef = useRef(false)
   const router = useRouter()
@@ -115,14 +116,17 @@ export default function SlotsPage() {
     init()
   }, [router])
 
-  const spin = useCallback(async () => {
+  const spin = useCallback(async (auto = false) => {
     if (spinning || bal < bet) return
+    const spinDur = auto ? 900 : 2200
+    const gap = auto ? 140 : 350
+    setReelGap(gap)
     setBal(b => b - bet)
     setSpinning(true)
-    startTension()
+    if (!auto) startTension()
     setLastNet(null)
     const result = [randomSym(), randomSym(), randomSym()]
-    await new Promise<void>(r => setTimeout(r, 2200))
+    await new Promise<void>(r => setTimeout(r, spinDur))
     setSyms(result)
     setSpinning(false)
     stopTension()
@@ -154,8 +158,8 @@ export default function SlotsPage() {
   useEffect(() => {
     if (!autoSpin || spinning) return
     const t = setTimeout(() => {
-      if (autoRef.current) spin()
-    }, 600)
+      if (autoRef.current) spin(true)
+    }, 200)
     return () => clearTimeout(t)
   }, [autoSpin, spinning, spin])
 
@@ -245,8 +249,8 @@ export default function SlotsPage() {
             <div style={{position:'absolute',top:'50%',left:0,right:0,height:2,background:`linear-gradient(90deg,transparent,rgba(217,182,90,${lastNet !== null && lastNet > 0 && !spinning ? '.9' : '.25'}),transparent)`,transform:'translateY(-50%)',pointerEvents:'none',transition:'.3s'}}/>
             <div className="cabinet-inner" style={{display:'flex',gap:16,justifyContent:'center',alignItems:'center'}}>
               <Reel sym={syms[0]} spinning={spinning} delay={0} />
-              <Reel sym={syms[1]} spinning={spinning} delay={350} />
-              <Reel sym={syms[2]} spinning={spinning} delay={700} />
+              <Reel sym={syms[1]} spinning={spinning} delay={reelGap} />
+              <Reel sym={syms[2]} spinning={spinning} delay={reelGap * 2} />
             </div>
           </div>
 
@@ -294,7 +298,7 @@ export default function SlotsPage() {
               className="btn spin-btn"
               style={{minWidth:220,fontSize:20,padding:'18px 48px',letterSpacing:'.15em',opacity: spinning || bal < bet ? .5 : 1}}
               disabled={spinning || bal < bet}
-              onClick={spin}
+              onClick={() => spin()}
             >
               {spinning ? 'Spinning…' : '▶  SPIN'}
             </button>
