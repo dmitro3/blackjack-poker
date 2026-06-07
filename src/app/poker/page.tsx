@@ -76,7 +76,7 @@ function SeatComp({ p, pos, snap, isButton, isHero }: {
           {isButton && <div className="dealer-btn" style={{ bottom: -6, right: -6 }}>D</div>}
         </div>
         <div className="meta">
-          <div className="nm">{p.name}</div>
+          <div className="nm">{isHero ? 'You' : p.name}</div>
           <div className="st tabnum">{p.sittingOut ? 'Sitting out' : fmt(p.stack)}</div>
         </div>
         {p.lastAct && <div className="lastact">{p.lastAct}</div>}
@@ -166,6 +166,11 @@ export default function PokerPage() {
           // Host/solo mode — create local game
           const game = new PokerGame(SEATS, profile.chips)
           game.onBankChange = (chips: number) => setBal(chips)
+          // Use real display name so guests see the correct name
+          if (profile.display_name) {
+            game.players[0].name = profile.display_name
+            game.players[0].avatar = profile.display_name[0].toUpperCase()
+          }
           gameRef.current = game
           setSnap(game.snapshot())
         }
@@ -313,6 +318,7 @@ export default function PokerPage() {
         guestSeatRef.current = gSeat
         const guestName = (payload.name as string) || 'Guest'
         g.players[gSeat].name = guestName
+        g.players[gSeat].avatar = guestName[0].toUpperCase()
         g.players[gSeat].isBot = false
 
         setGuestConnected(true)
@@ -568,7 +574,7 @@ export default function PokerPage() {
               <div className="m-you-info">
                 <div className={`m-av you${buttonSeat === heroSeat ? ' dealer' : ''}`}>{heroPlayer.avatar}</div>
                 <div>
-                  <div className="m-you-name">{isGuestMode ? myDisplayName : 'You'}</div>
+                  <div className="m-you-name">You</div>
                   <div className="m-you-stack">{fmt(isGuestMode ? heroPlayer.stack : bal)}</div>
                 </div>
                 {heroPlayer.bet > 0 && <div className="m-opp-bet" style={{ position: 'static', transform: 'none', marginLeft: 'auto' }}>{fmtShort(heroPlayer.bet)}</div>}
