@@ -265,8 +265,8 @@ export default function PokerPage() {
           <div className="s">NO-LIMIT · BLINDS 500 / 1,000</div>
         </div>
         <div className="right">
-          <button className="btn btn-sm btn-ghost" onClick={() => setShowHelp(true)}>How to Play</button>
-          <button className="btn btn-sm btn-ghost" onClick={() => setShowInvite(true)}>Invite</button>
+          <button className="btn btn-sm btn-ghost desk-only" onClick={() => setShowHelp(true)}>How to Play</button>
+          <button className="btn btn-sm btn-ghost desk-only" onClick={() => setShowInvite(true)}>Invite</button>
           <button
             className="btn btn-sm btn-ghost"
             style={{padding:'9px 13px',fontSize:16}}
@@ -280,22 +280,68 @@ export default function PokerPage() {
         </div>
       </header>
 
-      <div className="felt-stage">
+      {/* ── Desktop table ── */}
+      <div className="felt-stage desk-only">
         <div className="table-oval felt felt-red" />
-
         <div className={'dealer-plaque'+(dealing?' dealing':'')}>
-          <div className="croupier">
-            🤵
-            <span className="bowtie">🎀</span>
-          </div>
+          <div className="croupier">🤵<span className="bowtie">🎀</span></div>
           Dealer
         </div>
-
         <div className="center-area">
           {snap.pot > 0 && (
             <div className="pot">
-              <span className="coin" />
-              <span className="lbl">Pot</span>
+              <span className="coin" /><span className="lbl">Pot</span>
+              <span className="v tabnum">{fmt(snap.pot)}</span>
+            </div>
+          )}
+          <div className="board">
+            {[0,1,2,3,4].map(i => (
+              snap.community[i]
+                ? <CardComp key={i} card={snap.community[i]} idx={i} />
+                : <div key={i} className="slot" />
+            ))}
+          </div>
+        </div>
+        {showResult && <div className="result-banner">{snap.message}</div>}
+        {game.players.map((p, i) => (
+          <SeatComp key={i} p={p} pos={POS[i]} snap={snap} isButton={i === buttonSeat} />
+        ))}
+      </div>
+
+      {/* ── Mobile table ── */}
+      <div className="m-table mob-only">
+        {/* Opponent strip */}
+        <div className="m-opps">
+          {game.players.slice(1).map((p, idx) => {
+            const i = idx + 1
+            const active = snap.toAct === p.id && snap.street !== 'handover' && snap.street !== 'idle' && snap.street !== 'showdown'
+            const isWinner = snap.lastResult && snap.lastResult.winners.includes(p.id) && snap.street === 'handover'
+            const showCards = !!(snap.lastResult && snap.lastResult.showdown && !p.folded)
+            return (
+              <div key={i} className={`m-opp${active?' active':''}${p.folded?' folded':''}${isWinner?' winner':''}`}>
+                {p.hole && p.hole.length === 2 && !p.sittingOut && (
+                  <div className="m-opp-cards">
+                    <CardComp card={p.hole[0]} faceDown={!showCards} />
+                    <CardComp card={p.hole[1]} faceDown={!showCards} />
+                  </div>
+                )}
+                <div className={`m-av${p.isBot?' bot':''}`}>{p.avatar}</div>
+                <div className="m-opp-name">{p.name}</div>
+                <div className="m-opp-stack">{p.sittingOut ? '—' : fmtShort(p.stack)}</div>
+                {p.bet > 0 && <div className="m-opp-bet">{fmtShort(p.bet)}</div>}
+                {p.lastAct && <div className="m-opp-act">{p.lastAct}</div>}
+                {i === buttonSeat && <div className="m-btn-d">D</div>}
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Board */}
+        <div className="m-board-area">
+          {showResult && <div className="m-result-banner">{snap.message}</div>}
+          {snap.pot > 0 && (
+            <div className="pot">
+              <span className="coin" /><span className="lbl">Pot</span>
               <span className="v tabnum">{fmt(snap.pot)}</span>
             </div>
           )}
@@ -308,11 +354,35 @@ export default function PokerPage() {
           </div>
         </div>
 
-        {showResult && <div className="result-banner">{snap.message}</div>}
-
-        {game.players.map((p, i) => (
-          <SeatComp key={i} p={p} pos={POS[i]} snap={snap} isButton={i === buttonSeat} />
-        ))}
+        {/* Your seat */}
+        {(() => {
+          const you = game.players[0]
+          const youActive = snap.toAct === 0 && snap.street !== 'handover' && snap.street !== 'idle' && snap.street !== 'showdown'
+          const youWinner = snap.lastResult && snap.lastResult.winners.includes(0) && snap.street === 'handover'
+          return (
+            <div className={`m-you${youActive?' active':''}${youWinner?' winner':''}${you.folded?' folded':''}`}>
+              <div className="m-you-info">
+                <div className={`m-av you${buttonSeat === 0 ? ' dealer' : ''}`}>{you.avatar}</div>
+                <div>
+                  <div className="m-you-name">You</div>
+                  <div className="m-you-stack">{fmt(you.stack)}</div>
+                </div>
+                {you.bet > 0 && <div className="m-opp-bet" style={{position:'static',transform:'none',marginLeft:'auto'}}>{fmtShort(you.bet)}</div>}
+              </div>
+              <div className="m-you-cards">
+                {you.hole && you.hole.length === 2 && !you.sittingOut && (
+                  <>
+                    <CardComp card={you.hole[0]} idx={0} />
+                    <CardComp card={you.hole[1]} idx={1} />
+                  </>
+                )}
+              </div>
+              {snap.lastResult?.hands?.[0]?.name && !you.folded && (
+                <div className="m-hand-name">{snap.lastResult.hands[0].name}</div>
+              )}
+            </div>
+          )
+        })()}
       </div>
 
       <div className="control-bar">
@@ -510,20 +580,58 @@ export default function PokerPage() {
         .invite-field input { flex:1;background:rgba(0,0,0,.4);border:1px solid rgba(217,182,90,.3);border-radius:10px;padding:0 14px;color:var(--gold-l);font-size:13px;height:46px; }
         .modal .x { position:absolute;top:16px;right:18px;background:none;border:none;color:var(--cream-faint);font-size:24px;cursor:pointer;line-height:1; }
         .seatnote { margin-top:18px;font-size:12px;color:var(--cream-faint);line-height:1.5;border-top:1px solid rgba(217,182,90,.15);padding-top:14px; }
+        /* show/hide per breakpoint */
+        .mob-only { display: none; }
         @media (max-width: 640px) {
+          .desk-only { display: none !important; }
+          .mob-only { display: flex !important; }
+          /* topbar */
           .topbar { padding: 10px 14px !important; }
-          .topbar .title-c .t { font-size: 16px !important; }
+          .topbar .title-c .t { font-size: 15px !important; }
           .topbar .title-c .s { display: none; }
-          .topbar .right { gap: 6px !important; flex-wrap: wrap; justify-content: flex-end; max-width: 55vw; }
-          .felt-stage { margin: 8px 8px 4px !important; }
-          .seat { width: 130px !important; }
-          .seat .pod { padding: 6px 8px !important; }
-          .seat .nm { font-size: 10px !important; }
-          .raise-box { width: 220px !important; }
-          .actions .btn { min-width: 90px !important; font-size: 12px !important; padding: 10px 12px !important; }
-          .dealer-plaque { font-size: 10px !important; }
-          .board { gap: 6px !important; }
-          .control-bar { flex-wrap: wrap; gap: 10px !important; padding: 10px 14px 14px !important; min-height: unset !important; }
+          .topbar .right { gap: 8px !important; }
+          /* mobile table */
+          .m-table { flex: 1; flex-direction: column; background: radial-gradient(180% 120% at 50% 0%, #8a1c30 0%, #6a1325 42%, #440b18 100%); padding: 10px 8px 6px; gap: 8px; overflow: hidden; min-height: 0; }
+          /* opponent strip */
+          .m-opps { display: flex; gap: 7px; overflow-x: auto; flex: 0 0 auto; padding-bottom: 6px; scrollbar-width: none; }
+          .m-opps::-webkit-scrollbar { display: none; }
+          .m-opp { display: flex; flex-direction: column; align-items: center; gap: 3px; flex: 0 0 auto; width: 62px; padding: 6px 4px 10px; border-radius: 12px; background: rgba(0,0,0,.45); border: 1px solid rgba(217,182,90,.2); position: relative; transition: .2s; }
+          .m-opp.active { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(217,182,90,.4); }
+          .m-opp.folded { opacity: .3; filter: grayscale(.8); }
+          .m-opp.winner { border-color: var(--gold); box-shadow: 0 0 14px rgba(217,182,90,.6); }
+          .m-opp-cards { display: flex; gap: 2px; margin-bottom: 2px; }
+          .m-opp-cards .card { --w: 26px !important; animation: none !important; }
+          .m-av { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: var(--fs-head); font-weight: 800; font-size: 14px; flex: 0 0 auto; }
+          .m-av.bot { background: linear-gradient(160deg,#3a3327,#221d12); color: var(--gold-l); border: 1px solid rgba(217,182,90,.35); }
+          .m-av.you { background: var(--gold-grad); color: #2a1f08; }
+          .m-av.dealer::after { content:'D'; position: absolute; width: 18px; height: 18px; border-radius: 50%; background: var(--ivory); color: #1a130a; font-size: 9px; font-weight: 800; display: flex; align-items: center; justify-content: center; bottom: -2px; right: -2px; border: 1px solid var(--gold-d); }
+          .m-opp-name { font-size: 9px; color: var(--cream-dim); font-family: var(--fs-head); letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 58px; }
+          .m-opp-stack { font-size: 11px; color: var(--gold-l); font-weight: 700; font-variant-numeric: tabular-nums; }
+          .m-opp-bet { position: absolute; bottom: -9px; left: 50%; transform: translateX(-50%); font-size: 9px; color: var(--gold-l); background: rgba(0,0,0,.75); border: 1px solid rgba(217,182,90,.45); padding: 1px 6px; border-radius: 6px; white-space: nowrap; z-index: 5; }
+          .m-opp-act { position: absolute; top: -9px; left: 50%; transform: translateX(-50%); font-size: 8px; color: var(--cream-dim); background: rgba(0,0,0,.7); border: 1px solid rgba(217,182,90,.2); padding: 1px 5px; border-radius: 5px; white-space: nowrap; z-index: 5; }
+          .m-btn-d { position: absolute; top: -9px; right: -6px; width: 18px; height: 18px; border-radius: 50%; background: var(--ivory); color: #1a130a; font-family: var(--fs-head); font-weight: 800; font-size: 9px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--gold-d); z-index: 6; }
+          /* board area */
+          .m-board-area { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; min-height: 0; }
+          .m-result-banner { font-family: var(--fs-display); font-weight: 900; font-size: 18px; padding: 9px 22px; border-radius: 12px; background: var(--gold-grad); color: #2a1f08; box-shadow: 0 10px 30px rgba(0,0,0,.5); text-align: center; }
+          .m-board-area .board { gap: 5px !important; }
+          .m-board-area .board .card { --w: 54px !important; }
+          .m-board-area .board .slot { width: 54px !important; height: 76px !important; }
+          /* your seat */
+          .m-you { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; background: rgba(0,0,0,.55); border: 1px solid rgba(217,182,90,.35); border-radius: 16px; position: relative; transition: .2s; }
+          .m-you.active { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(217,182,90,.4); }
+          .m-you.winner { border-color: var(--gold); box-shadow: 0 0 20px rgba(217,182,90,.55); }
+          .m-you.folded { opacity: .5; }
+          .m-you-info { display: flex; align-items: center; gap: 8px; }
+          .m-you-name { font-family: var(--fs-head); font-weight: 700; font-size: 13px; color: var(--cream); }
+          .m-you-stack { font-size: 12px; color: var(--gold-l); font-weight: 600; font-variant-numeric: tabular-nums; }
+          .m-you-cards { display: flex; gap: 6px; }
+          .m-you-cards .card { --w: 58px !important; }
+          .m-hand-name { position: absolute; bottom: -10px; left: 50%; transform: translateX(-50%); font-size: 9px; letter-spacing: .06em; background: var(--gold-grad); color: #2a1f08; font-weight: 800; padding: 2px 8px; border-radius: 6px; white-space: nowrap; z-index: 8; text-transform: uppercase; }
+          /* control bar */
+          .control-bar { flex-wrap: wrap; gap: 8px !important; padding: 10px 12px 14px !important; min-height: unset !important; }
+          .actions .btn { min-width: 80px !important; font-size: 13px !important; padding: 12px 14px !important; flex: 1; }
+          .raise-box { width: 100% !important; }
+          .quick button { padding: 9px 0 !important; font-size: 12px !important; }
         }
       `}</style>
     </div>
