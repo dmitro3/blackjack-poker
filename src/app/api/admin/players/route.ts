@@ -12,7 +12,7 @@ export async function GET() {
 
   const [playersRes, sessionsRes, settingsRes] = await Promise.all([
     admin.from('profiles').select('*').order('created_at', { ascending: false }),
-    admin.from('game_sessions').select('game, chips_wagered, chips_won'),
+    admin.from('game_sessions').select('user_id, game, chips_wagered, chips_won, created_at').order('created_at', { ascending: false }),
     admin.from('admin_settings').select('value').eq('key', 'refill_enabled').single(),
   ])
 

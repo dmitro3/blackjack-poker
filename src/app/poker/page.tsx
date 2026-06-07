@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -10,30 +10,32 @@ import { playDeal, playChip, playWin, playLose, startTension, stopTension, isMut
 import { generateCode, prettyCode } from '@/lib/invite-codes'
 
 const SEATS = [
-  { name:'You', avatar:'V' },
+  { name:'You',    avatar:'V' },
   { name:'Marcel', avatar:'M' },
   { name:'Bianca', avatar:'B' },
-  { name:'Saxon', avatar:'S' },
+  { name:'Saxon',  avatar:'S' },
   { name:'Odette', avatar:'O' },
   { name:'Dmitri', avatar:'D' },
 ]
 
 const POS = [
   { x:50, y:91, bx:0,   by:-72 },
-  { x:87, y:65, bx:-70, by:-2 },
-  { x:83, y:19, bx:-62, by:18 },
-  { x:50, y:7,  bx:0,   by:66 },
-  { x:17, y:19, bx:62,  by:18 },
-  { x:13, y:65, bx:70,  by:-2 },
+  { x:87, y:65, bx:-70, by:-2  },
+  { x:83, y:19, bx:-62, by:18  },
+  { x:50, y:7,  bx:0,   by:66  },
+  { x:17, y:19, bx:62,  by:18  },
+  { x:13, y:65, bx:70,  by:-2  },
 ]
 
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
 
-function CardComp({ card, faceDown, idx = 0, cls = '' }: { card: Card | null; faceDown?: boolean; idx?: number; cls?: string }) {
-  const style = { animationDelay: (idx*0.07)+'s' } as React.CSSProperties
-  if (faceDown || !card) return <div className={'card back '+cls} style={style} />
+function CardComp({ card, faceDown, idx = 0, cls = '' }: {
+  card: Card | null; faceDown?: boolean; idx?: number; cls?: string
+}) {
+  const style = { animationDelay: (idx * 0.07) + 's' } as React.CSSProperties
+  if (faceDown || !card) return <div className={'card back ' + cls} style={style} />
   return (
-    <div className={'card '+(card.color==='red'?'red ':'')+cls} style={style}>
+    <div className={'card ' + (card.color === 'red' ? 'red ' : '') + cls} style={style}>
       <div className="pip-tl"><div className="rank">{card.rank}</div><div className="pip-suit">{card.suit}</div></div>
       <div className="center-suit">{card.suit}</div>
       <div className="pip-br"><div className="rank">{card.rank}</div><div className="pip-suit">{card.suit}</div></div>
@@ -41,23 +43,25 @@ function CardComp({ card, faceDown, idx = 0, cls = '' }: { card: Card | null; fa
   )
 }
 
-function SeatComp({ p, pos, snap, isButton }: {
-  p: PokerGame['players'][0];
-  pos: typeof POS[0];
-  snap: GameSnapshot;
-  isButton: boolean;
+function SeatComp({ p, pos, snap, isButton, isHero }: {
+  p: PokerGame['players'][0]
+  pos: typeof POS[0]
+  snap: GameSnapshot
+  isButton: boolean
+  isHero: boolean
 }) {
-  const active = snap.toAct === p.id && (snap.street !== 'handover' && snap.street !== 'idle' && snap.street !== 'showdown')
+  const active = snap.toAct === p.id && snap.street !== 'handover' && snap.street !== 'idle' && snap.street !== 'showdown'
   const isWinner = snap.lastResult && snap.lastResult.winners.indexOf(p.id) >= 0 && snap.street === 'handover'
   const showCards = snap.lastResult && snap.lastResult.showdown && !p.folded
-  const reveal = p.isYou || !!showCards
-  const handName = snap.lastResult && snap.lastResult.showdown && snap.lastResult.hands[p.id] && !p.folded
+  const reveal = isHero || !!showCards
+  const handName = snap.lastResult?.showdown && snap.lastResult.hands[p.id] && !p.folded
     ? snap.lastResult.hands[p.id].name : null
-  const cls = 'seat'+(p.isYou?' you':'')+(p.isBot?' bot':'')+(p.folded?' folded':'')+(active?' active':'')+(isWinner?' winner':'')
+  const cls = 'seat' + (isHero ? ' you' : '') + (!isHero && p.isBot ? ' bot' : '') +
+    (p.folded ? ' folded' : '') + (active ? ' active' : '') + (isWinner ? ' winner' : '')
   const hasHole = p.hole && p.hole.length === 2 && !p.sittingOut
 
   return (
-    <div className={cls} style={{ left: pos.x+'%', top: pos.y+'%' }}>
+    <div className={cls} style={{ left: pos.x + '%', top: pos.y + '%' }}>
       {hasHole && handName && <div className="rank-pill">{handName}</div>}
       {hasHole && (
         <div className="holes">
@@ -66,10 +70,10 @@ function SeatComp({ p, pos, snap, isButton }: {
         </div>
       )}
       <div className="pod">
-        {p.isYou ? null : <span className="tag">{p.isBot?'House':'Guest'}</span>}
+        {!isHero && <span className="tag">{p.isBot ? 'House' : 'Guest'}</span>}
         <div className="av">
           {p.avatar}
-          {isButton && <div className="dealer-btn" style={{bottom:-6,right:-6}}>D</div>}
+          {isButton && <div className="dealer-btn" style={{ bottom: -6, right: -6 }}>D</div>}
         </div>
         <div className="meta">
           <div className="nm">{p.name}</div>
@@ -78,7 +82,7 @@ function SeatComp({ p, pos, snap, isButton }: {
         {p.lastAct && <div className="lastact">{p.lastAct}</div>}
       </div>
       {p.bet > 0 && (
-        <div className="betchip" style={{ left:`calc(50% + ${pos.bx}px)`, top:`calc(50% + ${pos.by}px)`, transform:'translate(-50%,-50%)' }}>
+        <div className="betchip" style={{ left: `calc(50% + ${pos.bx}px)`, top: `calc(50% + ${pos.by}px)`, transform: 'translate(-50%,-50%)' }}>
           <span className="dot" />{fmtShort(p.bet)}
         </div>
       )}
@@ -88,11 +92,22 @@ function SeatComp({ p, pos, snap, isButton }: {
 
 function Toast({ msg, kind, onDone }: { msg: string; kind: string; onDone: () => void }) {
   useEffect(() => { const t = setTimeout(onDone, 2200); return () => clearTimeout(t) }, [onDone])
-  const bg = kind==='win'?'linear-gradient(160deg,#f3dd96,#d9b65a,#9c7b2e)':kind==='lose'?'linear-gradient(160deg,#6a1325,#440b18)':'linear-gradient(180deg,#241f15,#0b0a07)'
-  return <div style={{position:'fixed',left:'50%',bottom:38,transform:'translateX(-50%)',zIndex:9999,padding:'13px 26px',borderRadius:999,fontFamily:'Cinzel,serif',fontWeight:600,letterSpacing:'.05em',boxShadow:'0 14px 40px rgba(0,0,0,.5)',border:'1px solid rgba(217,182,90,.5)',background:bg,color:kind==='win'?'#2a1f08':'var(--cream)',animation:'floatUp .35s'}}>{msg}</div>
+  const bg = kind === 'win'
+    ? 'linear-gradient(160deg,#f3dd96,#d9b65a,#9c7b2e)'
+    : kind === 'lose'
+    ? 'linear-gradient(160deg,#6a1325,#440b18)'
+    : 'linear-gradient(180deg,#241f15,#0b0a07)'
+  return (
+    <div style={{ position: 'fixed', left: '50%', bottom: 38, transform: 'translateX(-50%)', zIndex: 9999, padding: '13px 26px', borderRadius: 999, fontFamily: 'Cinzel,serif', fontWeight: 600, letterSpacing: '.05em', boxShadow: '0 14px 40px rgba(0,0,0,.5)', border: '1px solid rgba(217,182,90,.5)', background: bg, color: kind === 'win' ? '#2a1f08' : 'var(--cream)', animation: 'floatUp .35s' }}>
+      {msg}
+    </div>
+  )
 }
 
 export default function PokerPage() {
+  // Stable supabase client — never recreated across renders
+  const supabase = useMemo(() => createClient(), [])
+
   const gameRef = useRef<PokerGame | null>(null)
   const [snap, setSnap] = useState<GameSnapshot | null>(null)
   const [showInvite, setShowInvite] = useState(false)
@@ -100,43 +115,118 @@ export default function PokerPage() {
   const [raiseTo, setRaiseTo] = useState(0)
   const [dealing, setDealing] = useState(false)
   const [bal, setBal] = useState(100000)
-  const [toast, setToast] = useState<{msg:string,kind:string}|null>(null)
+  const [toast, setToast] = useState<{ msg: string; kind: string } | null>(null)
   const [muted, setMutedUI] = useState(false)
-
-  useEffect(() => {
-    try { setMutedUI(isMuted()) } catch { /* ignore */ }
-  }, [])
   const [inviteCode, setInviteCode] = useState('')
   const [loading, setLoading] = useState(true)
   const autoNext = useRef<ReturnType<typeof setTimeout> | null>(null)
   const router = useRouter()
-  const supabase = createClient()
-
-  // Track session chips for logging
   const sessionStartRef = useRef(100000)
+
+  // ── Multiplayer ────────────────────────────────────────────────────────────
+  // modeRef: 'solo' = normal single player, 'host' = invited a friend, 'guest' = joined a friend
+  const modeRef = useRef<'solo' | 'host' | 'guest'>('solo')
+  const guestSeatRef = useRef<number | null>(null)      // host: which seat belongs to guest
+  const myGuestSeatRef = useRef<number | null>(null)    // guest: which seat is mine
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  const joinCodeRef = useRef<string | null>(null)
+
+  const [myGuestSeat, setMyGuestSeat] = useState<number | null>(null)
+  const [guestConnected, setGuestConnected] = useState(false)
+  const [waitingForGuest, setWaitingForGuest] = useState(false)
+  const [hostSnap, setHostSnap] = useState<GameSnapshot | null>(null)
+  const [hostLegal, setHostLegal] = useState<LegalActions | null>(null)
+  const [myDisplayName, setMyDisplayName] = useState('Guest')
+
+  useEffect(() => {
+    try { setMutedUI(isMuted()) } catch { /**/ }
+  }, [])
 
   function showToast(msg: string, kind = '') { setToast({ msg, kind }) }
 
+  // ── Init: load profile, detect guest join ──────────────────────────────────
   useEffect(() => {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
-      const { data: profile } = await supabase.from('profiles').select('chips').eq('id', user.id).single()
+      const { data: profile } = await supabase.from('profiles').select('chips, display_name').eq('id', user.id).single()
       if (profile) {
         setBal(profile.chips)
         sessionStartRef.current = profile.chips
-        const game = new PokerGame(SEATS, profile.chips)
-        game.onBankChange = (chips: number) => setBal(chips)
-        gameRef.current = game
-        setSnap(game.snapshot())
+        if (profile.display_name) setMyDisplayName(profile.display_name)
+
+        // Check URL for join code
+        const params = new URLSearchParams(window.location.search)
+        const jc = params.get('join')
+        if (jc) {
+          // Guest mode — don't create local game
+          joinCodeRef.current = jc.toUpperCase()
+          modeRef.current = 'guest'
+        } else {
+          // Host/solo mode — create local game
+          const game = new PokerGame(SEATS, profile.chips)
+          game.onBankChange = (chips: number) => setBal(chips)
+          gameRef.current = game
+          setSnap(game.snapshot())
+        }
       }
       setLoading(false)
     }
     init()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router])
 
+  // ── Guest: subscribe to host's Supabase Realtime channel ──────────────────
+  useEffect(() => {
+    if (loading || modeRef.current !== 'guest' || !joinCodeRef.current) return
+    const jc = joinCodeRef.current
+
+    const channel = supabase.channel(`ht-game-${jc}`, {
+      config: { broadcast: { self: false } },
+    })
+
+    channel
+      .on('broadcast', { event: 'STATE' }, ({ payload }) => {
+        const { snap: s, legal: l, guestSeat: gs } = payload as {
+          snap: GameSnapshot; legal: LegalActions | null; guestSeat: number | null
+        }
+        setHostSnap(s)
+        setHostLegal(l)
+        if (myGuestSeatRef.current === null && gs != null) {
+          myGuestSeatRef.current = gs
+          setMyGuestSeat(gs)
+        }
+      })
+      .subscribe(status => {
+        if (status === 'SUBSCRIBED') {
+          channel.send({
+            type: 'broadcast',
+            event: 'GUEST_JOIN',
+            payload: { name: myDisplayName },
+          })
+        }
+      })
+
+    channelRef.current = channel
+    return () => { channel.unsubscribe() }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading])
+
+  // ── sync: update local snap + broadcast to guest (host only) ──────────────
   const sync = useCallback(() => {
-    if (gameRef.current) setSnap({...gameRef.current.snapshot()})
+    const g = gameRef.current
+    if (!g) return
+    const s = { ...g.snapshot() }
+    setSnap(s)
+    if (modeRef.current === 'host' && channelRef.current) {
+      const gs = guestSeatRef.current
+      const legal = gs !== null && g.toAct === gs ? g.legal() : null
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'STATE',
+        payload: JSON.parse(JSON.stringify({ snap: g.snapshot(), legal, guestSeat: gs })),
+      }).catch(() => {})
+    }
   }, [])
 
   const endHand = useCallback(() => {
@@ -144,8 +234,10 @@ export default function PokerPage() {
     stopTension()
     if (autoNext.current) clearTimeout(autoNext.current)
     autoNext.current = setTimeout(() => startHand(), 4200)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sync])
 
+  // ── drive: advance game — pauses when it's the guest's turn ───────────────
   const drive = useCallback(() => {
     const g = gameRef.current
     if (!g) return
@@ -153,18 +245,21 @@ export default function PokerPage() {
     const p = g.players[g.toAct]
     if (!p) { sync(); return }
     sync()
-    if (p.isYou) return
+    if (p.isYou) return  // host's turn — wait for input
+    if (guestSeatRef.current !== null && g.toAct === guestSeatRef.current) return  // guest's turn — wait
+    // Bot plays
     setTimeout(() => {
       const g2 = gameRef.current
-      if (!g2) return
-      if (g2.players[g2.toAct] && !g2.players[g2.toAct].isYou && g2.street !== 'handover') {
+      if (!g2 || g2.street === 'handover') return
+      const isGuestTurn = guestSeatRef.current !== null && g2.toAct === guestSeatRef.current
+      if (g2.players[g2.toAct] && !g2.players[g2.toAct].isYou && !isGuestTurn) {
         const d = g2.botDecision()
         const ev = g2.apply(d.type, d.amount)
         sync()
         if (ev === 'showdown' || ev === 'win') { endHand() }
         else { drive() }
       }
-    }, 850 + Math.random()*500)
+    }, 850 + Math.random() * 500)
   }, [sync, endHand])
 
   const startHand = useCallback(async () => {
@@ -174,7 +269,6 @@ export default function PokerPage() {
     setDealing(true)
     g.startHand()
     sync()
-    // Play deal sounds as cards are "distributed"
     for (let i = 0; i < 2; i++) { playDeal(); await sleep(200) }
     await sleep(300)
     setDealing(false)
@@ -182,6 +276,7 @@ export default function PokerPage() {
     drive()
   }, [sync, drive])
 
+  // ── act: host/solo action ─────────────────────────────────────────────────
   const act = useCallback((type: string, amount?: number) => {
     const g = gameRef.current
     if (!g) return
@@ -193,7 +288,68 @@ export default function PokerPage() {
     else { drive() }
   }, [sync, drive, endHand])
 
-  // Start first hand
+  // ── guestAct: guest sends action to host via channel ──────────────────────
+  const guestAct = useCallback((type: string, amount?: number) => {
+    const channel = channelRef.current
+    if (!channel) return
+    if (type === 'call' || type === 'raise' || type === 'allin') playChip()
+    channel.send({ type: 'broadcast', event: 'ACTION', payload: { type, amount } }).catch(() => {})
+  }, [])
+
+  // ── handleInvite: host sets up realtime channel ───────────────────────────
+  const handleInvite = useCallback((code: string) => {
+    if (modeRef.current !== 'solo') return   // already in a multiplayer game
+    modeRef.current = 'host'
+    setWaitingForGuest(true)
+
+    const channel = supabase.channel(`ht-game-${code}`, {
+      config: { broadcast: { self: false } },
+    })
+
+    channel
+      .on('broadcast', { event: 'GUEST_JOIN' }, ({ payload }) => {
+        const g = gameRef.current!
+        const gSeat = 1   // replace bot at seat 1
+        guestSeatRef.current = gSeat
+        const guestName = (payload.name as string) || 'Guest'
+        g.players[gSeat].name = guestName
+        g.players[gSeat].isBot = false
+
+        setGuestConnected(true)
+        setWaitingForGuest(false)
+        showToast(`${guestName} joined the table!`, 'win')
+
+        // Send full state to new guest immediately
+        const gs = guestSeatRef.current
+        const legal = g.toAct === gs ? g.legal() : null
+        channel.send({
+          type: 'broadcast',
+          event: 'STATE',
+          payload: JSON.parse(JSON.stringify({ snap: g.snapshot(), legal, guestSeat: gs })),
+        }).catch(() => {})
+        sync()
+      })
+      .on('broadcast', { event: 'ACTION' }, ({ payload }) => {
+        const g = gameRef.current
+        const gSeat = guestSeatRef.current
+        if (!g || gSeat === null || g.toAct !== gSeat) return
+        const { type, amount } = payload as { type: string; amount?: number }
+        if (type === 'call' || type === 'raise' || type === 'allin') playChip()
+        const ev = g.apply(type, amount)
+        sync()
+        if (ev === 'showdown' || ev === 'win') { endHand() }
+        else { drive() }
+      })
+      .subscribe()
+
+    channelRef.current = channel
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sync, drive, endHand])
+
+  // Cleanup channel on unmount
+  useEffect(() => () => { channelRef.current?.unsubscribe() }, [])
+
+  // Start first hand (solo/host only)
   useEffect(() => {
     if (!loading && gameRef.current) {
       const t = setTimeout(() => startHand(), 500)
@@ -201,58 +357,92 @@ export default function PokerPage() {
     }
   }, [loading, startHand])
 
-  // Raise slider default
+  // Raise default when it's your turn
   useEffect(() => {
-    if (!snap || !gameRef.current) return
-    const youToAct = snap.toAct === 0 && !gameRef.current.players[0].folded
-    if (youToAct) {
-      const legal = gameRef.current.legal()
-      if (legal && legal.canRaise) setRaiseTo(legal.minRaiseTo)
-    }
-  }, [snap?.toAct, snap?.street])
+    const isGuest = modeRef.current === 'guest'
+    const s = isGuest ? hostSnap : snap
+    const hero = isGuest ? (myGuestSeat ?? 0) : 0
+    if (!s || s.toAct !== hero || s.players[hero]?.folded) return
+    const legal = isGuest ? hostLegal : (gameRef.current?.legal() ?? null)
+    if (legal?.canRaise) setRaiseTo(legal.minRaiseTo)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snap?.toAct, snap?.street, hostSnap?.toAct, hostSnap?.street])
 
-  // Play win/lose sounds and start tension on showdown
+  // Sounds
   useEffect(() => {
-    if (!snap) return
-    if (snap.street === 'showdown') startTension()
-    if (snap.street === 'handover' && snap.lastResult) {
+    const s = modeRef.current === 'guest' ? hostSnap : snap
+    if (!s) return
+    if (s.street === 'showdown') startTension()
+    if (s.street === 'handover' && s.lastResult) {
       stopTension()
-      const youWon = snap.lastResult.winners.includes(0)
-      if (youWon) playWin(); else playLose()
+      const hero = modeRef.current === 'guest' ? (myGuestSeat ?? 0) : 0
+      if (s.lastResult.winners.includes(hero)) playWin(); else playLose()
     }
-  }, [snap?.street, snap?.handNo])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snap?.street, snap?.handNo, hostSnap?.street, hostSnap?.handNo])
 
-  // Log session when chips change significantly (on hand end)
+  // Session logging (host/solo)
   useEffect(() => {
-    if (!snap || snap.street !== 'handover') return
-    const currentChips = bal
-    const diff = currentChips - sessionStartRef.current
+    if (!snap || snap.street !== 'handover' || modeRef.current === 'guest') return
+    const diff = bal - sessionStartRef.current
     if (diff !== 0) {
-      const wagered = diff < 0 ? -diff : 0
-      const won = diff > 0 ? diff : 0
       fetch('/api/game/session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ game: 'poker', chips_wagered: wagered, chips_won: won }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ game: 'poker', chips_wagered: diff < 0 ? -diff : 0, chips_won: diff > 0 ? diff : 0 }),
       }).catch(() => {})
-      sessionStartRef.current = currentChips
+      sessionStartRef.current = bal
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snap?.handNo, snap?.street])
 
-  if (loading || !snap || !gameRef.current) return (
-    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center'}}>
-      <div style={{color:'var(--gold-l)',fontFamily:'var(--fs-head)',letterSpacing:'.1em'}}>Loading…</div>
+  // ── Render ─────────────────────────────────────────────────────────────────
+  const isGuestMode = modeRef.current === 'guest'
+
+  if (loading) return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ color: 'var(--gold-l)', fontFamily: 'var(--fs-head)', letterSpacing: '.1em' }}>Loading…</div>
     </div>
   )
 
-  const game = gameRef.current
-  const youToAct = snap.toAct === 0 && !game.players[0].folded &&
-    (snap.street === 'preflop' || snap.street === 'flop' || snap.street === 'turn' || snap.street === 'river')
-  const legal: LegalActions | null = youToAct ? game.legal() : null
-  const buttonSeat = snap.button
-  const showResult = snap.street === 'handover' && snap.lastResult
+  if (isGuestMode && !hostSnap) return (
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'radial-gradient(120% 80% at 50% -10%, #241f15 0%, #13110b 45%, #0b0a07 100%)' }}>
+      <div style={{ fontFamily: 'var(--fs-head)', fontSize: 22, letterSpacing: '.1em', color: 'var(--gold-l)', marginBottom: 12 }}>Joining table…</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'var(--fs-head)', fontSize: 13, color: 'var(--cream-faint)', letterSpacing: '.08em' }}>
+        <span style={{ width: 14, height: 14, border: '2px solid rgba(217,182,90,.3)', borderTopColor: 'var(--gold)', borderRadius: '50%', display: 'inline-block', animation: 'spin360 .8s linear infinite' }} />
+        Waiting for host to share game state…
+      </div>
+      <style>{`@keyframes spin360 { to { transform: rotate(360deg) } }`}</style>
+    </div>
+  )
 
-  const safeRaise = legal ? Math.min(Math.max(raiseTo, legal.minRaiseTo), legal.maxRaiseTo) : 0
+  if (!isGuestMode && (!snap || !gameRef.current)) return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ color: 'var(--gold-l)', fontFamily: 'var(--fs-head)', letterSpacing: '.1em' }}>Loading…</div>
+    </div>
+  )
+
+  // Unified display — guest uses host's snapshot, host uses local snapshot
+  const displaySnap = isGuestMode ? hostSnap! : snap!
+  const displayPlayers = displaySnap.players
+  const heroSeat = isGuestMode ? (myGuestSeat ?? 0) : 0
+  const heroPlayer = displayPlayers[heroSeat]
+  const game = gameRef.current
+
+  const heroToAct = displaySnap.toAct === heroSeat &&
+    heroPlayer && !heroPlayer.folded &&
+    (displaySnap.street === 'preflop' || displaySnap.street === 'flop' ||
+     displaySnap.street === 'turn' || displaySnap.street === 'river')
+
+  const activeLegal: LegalActions | null = isGuestMode
+    ? (heroToAct ? hostLegal : null)
+    : (heroToAct && game ? game.legal() : null)
+
+  const doAct = isGuestMode ? guestAct : act
+  const buttonSeat = displaySnap.button
+  const showResult = displaySnap.street === 'handover' && displaySnap.lastResult
+  const safeRaise = activeLegal
+    ? Math.min(Math.max(raiseTo, activeLegal.minRaiseTo), activeLegal.maxRaiseTo)
+    : 0
 
   return (
     <div className="table-wrap">
@@ -262,20 +452,38 @@ export default function PokerPage() {
         <Link className="back" href="/">← Lobby</Link>
         <div className="title-c">
           <div className="t gold-text">TEXAS HOLD&apos;EM</div>
-          <div className="s">NO-LIMIT · BLINDS 500 / 1,000</div>
+          <div className="s">
+            NO-LIMIT · BLINDS 500/1,000
+            {guestConnected && <span style={{ color: '#3ad07a', marginLeft: 8 }}>● LIVE</span>}
+            {isGuestMode && <span style={{ color: '#3ad07a', marginLeft: 8 }}>● LIVE</span>}
+          </div>
         </div>
         <div className="right">
           <button className="btn btn-sm btn-ghost desk-only" onClick={() => setShowHelp(true)}>How to Play</button>
-          <button className="btn btn-sm btn-ghost desk-only" onClick={() => { setInviteCode(generateCode('poker')); setShowInvite(true) }}>Invite</button>
+          {!isGuestMode && (
+            <button
+              className="btn btn-sm desk-only"
+              style={guestConnected ? { background: 'rgba(58,208,122,.15)', borderColor: '#3ad07a', color: '#3ad07a' } : {}}
+              onClick={() => {
+                if (modeRef.current !== 'solo') return
+                const code = generateCode('poker')
+                setInviteCode(code)
+                setShowInvite(true)
+                handleInvite(code)
+              }}
+            >
+              {waitingForGuest ? '⏳ Waiting…' : guestConnected ? '✓ Friend joined' : 'Invite Friend'}
+            </button>
+          )}
           <button
             className="btn btn-sm btn-ghost"
-            style={{padding:'9px 13px',fontSize:16}}
+            style={{ padding: '9px 13px', fontSize: 16 }}
             onClick={() => { const next = !muted; setMutedUI(next); setMuted(next) }}
             title={muted ? 'Unmute' : 'Mute'}
           >{muted ? '🔇' : '🔊'}</button>
           <div className="balance">
             <div className="coin">H</div>
-            <span className="amt tabnum">{fmt(bal)}</span>
+            <span className="amt tabnum">{fmt(isGuestMode ? (heroPlayer?.stack ?? bal) : bal)}</span>
           </div>
         </div>
       </header>
@@ -283,49 +491,48 @@ export default function PokerPage() {
       {/* ── Desktop table ── */}
       <div className="felt-stage desk-only">
         <div className="table-oval felt felt-red" />
-        <div className={'dealer-plaque'+(dealing?' dealing':'')}>
+        <div className={'dealer-plaque' + (dealing ? ' dealing' : '')}>
           <div className="croupier">🤵<span className="bowtie">🎀</span></div>
           Dealer
         </div>
         <div className="center-area">
-          {snap.pot > 0 && (
+          {displaySnap.pot > 0 && (
             <div className="pot">
               <span className="coin" /><span className="lbl">Pot</span>
-              <span className="v tabnum">{fmt(snap.pot)}</span>
+              <span className="v tabnum">{fmt(displaySnap.pot)}</span>
             </div>
           )}
           <div className="board">
-            {[0,1,2,3,4].map(i => (
-              snap.community[i]
-                ? <CardComp key={i} card={snap.community[i]} idx={i} />
+            {[0, 1, 2, 3, 4].map(i => (
+              displaySnap.community[i]
+                ? <CardComp key={i} card={displaySnap.community[i]} idx={i} />
                 : <div key={i} className="slot" />
             ))}
           </div>
         </div>
-        {showResult && <div className="result-banner">{snap.message}</div>}
-        {game.players.map((p, i) => (
-          <SeatComp key={i} p={p} pos={POS[i]} snap={snap} isButton={i === buttonSeat} />
+        {showResult && <div className="result-banner">{displaySnap.message}</div>}
+        {displayPlayers.map((p, i) => (
+          <SeatComp key={i} p={p} pos={POS[i]} snap={displaySnap} isButton={i === buttonSeat} isHero={i === heroSeat} />
         ))}
       </div>
 
       {/* ── Mobile table ── */}
       <div className="m-table mob-only">
-        {/* Opponent strip */}
         <div className="m-opps">
-          {game.players.slice(1).map((p, idx) => {
-            const i = idx + 1
-            const active = snap.toAct === p.id && snap.street !== 'handover' && snap.street !== 'idle' && snap.street !== 'showdown'
-            const isWinner = snap.lastResult && snap.lastResult.winners.includes(p.id) && snap.street === 'handover'
-            const showCards = !!(snap.lastResult && snap.lastResult.showdown && !p.folded)
+          {displayPlayers.filter((_, i) => i !== heroSeat).map(p => {
+            const i = p.id
+            const active = displaySnap.toAct === i && displaySnap.street !== 'handover' && displaySnap.street !== 'idle' && displaySnap.street !== 'showdown'
+            const isWinner = displaySnap.lastResult?.winners.includes(i) && displaySnap.street === 'handover'
+            const showCards = !!(displaySnap.lastResult?.showdown && !p.folded)
             return (
-              <div key={i} className={`m-opp${active?' active':''}${p.folded?' folded':''}${isWinner?' winner':''}`}>
-                {p.hole && p.hole.length === 2 && !p.sittingOut && (
+              <div key={i} className={`m-opp${active ? ' active' : ''}${p.folded ? ' folded' : ''}${isWinner ? ' winner' : ''}`}>
+                {p.hole?.length === 2 && !p.sittingOut && (
                   <div className="m-opp-cards">
                     <CardComp card={p.hole[0]} faceDown={!showCards} />
                     <CardComp card={p.hole[1]} faceDown={!showCards} />
                   </div>
                 )}
-                <div className={`m-av${p.isBot?' bot':''}`}>{p.avatar}</div>
+                <div className={`m-av${p.isBot ? ' bot' : ''}`}>{p.avatar}</div>
                 <div className="m-opp-name">{p.name}</div>
                 <div className="m-opp-stack">{p.sittingOut ? '—' : fmtShort(p.stack)}</div>
                 {p.bet > 0 && <div className="m-opp-bet">{fmtShort(p.bet)}</div>}
@@ -336,177 +543,196 @@ export default function PokerPage() {
           })}
         </div>
 
-        {/* Board */}
         <div className="m-board-area">
-          {showResult && <div className="m-result-banner">{snap.message}</div>}
-          {snap.pot > 0 && (
+          {showResult && <div className="m-result-banner">{displaySnap.message}</div>}
+          {displaySnap.pot > 0 && (
             <div className="pot">
               <span className="coin" /><span className="lbl">Pot</span>
-              <span className="v tabnum">{fmt(snap.pot)}</span>
+              <span className="v tabnum">{fmt(displaySnap.pot)}</span>
             </div>
           )}
           <div className="board">
-            {[0,1,2,3,4].map(i => (
-              snap.community[i]
-                ? <CardComp key={i} card={snap.community[i]} idx={i} />
+            {[0, 1, 2, 3, 4].map(i => (
+              displaySnap.community[i]
+                ? <CardComp key={i} card={displaySnap.community[i]} idx={i} />
                 : <div key={i} className="slot" />
             ))}
           </div>
         </div>
 
-        {/* Your seat */}
-        {(() => {
-          const you = game.players[0]
-          const youActive = snap.toAct === 0 && snap.street !== 'handover' && snap.street !== 'idle' && snap.street !== 'showdown'
-          const youWinner = snap.lastResult && snap.lastResult.winners.includes(0) && snap.street === 'handover'
+        {heroPlayer && (() => {
+          const youActive = heroToAct
+          const youWinner = displaySnap.lastResult?.winners.includes(heroSeat) && displaySnap.street === 'handover'
           return (
-            <div className={`m-you${youActive?' active':''}${youWinner?' winner':''}${you.folded?' folded':''}`}>
+            <div className={`m-you${youActive ? ' active' : ''}${youWinner ? ' winner' : ''}${heroPlayer.folded ? ' folded' : ''}`}>
               <div className="m-you-info">
-                <div className={`m-av you${buttonSeat === 0 ? ' dealer' : ''}`}>{you.avatar}</div>
+                <div className={`m-av you${buttonSeat === heroSeat ? ' dealer' : ''}`}>{heroPlayer.avatar}</div>
                 <div>
-                  <div className="m-you-name">You</div>
-                  <div className="m-you-stack">{fmt(you.stack)}</div>
+                  <div className="m-you-name">{isGuestMode ? myDisplayName : 'You'}</div>
+                  <div className="m-you-stack">{fmt(isGuestMode ? heroPlayer.stack : bal)}</div>
                 </div>
-                {you.bet > 0 && <div className="m-opp-bet" style={{position:'static',transform:'none',marginLeft:'auto'}}>{fmtShort(you.bet)}</div>}
+                {heroPlayer.bet > 0 && <div className="m-opp-bet" style={{ position: 'static', transform: 'none', marginLeft: 'auto' }}>{fmtShort(heroPlayer.bet)}</div>}
               </div>
               <div className="m-you-cards">
-                {you.hole && you.hole.length === 2 && !you.sittingOut && (
+                {heroPlayer.hole?.length === 2 && !heroPlayer.sittingOut && (
                   <>
-                    <CardComp card={you.hole[0]} idx={0} />
-                    <CardComp card={you.hole[1]} idx={1} />
+                    <CardComp card={heroPlayer.hole[0]} idx={0} />
+                    <CardComp card={heroPlayer.hole[1]} idx={1} />
                   </>
                 )}
               </div>
-              {snap.lastResult?.hands?.[0]?.name && !you.folded && (
-                <div className="m-hand-name">{snap.lastResult.hands[0].name}</div>
+              {displaySnap.lastResult?.hands?.[heroSeat]?.name && !heroPlayer.folded && (
+                <div className="m-hand-name">{displaySnap.lastResult.hands[heroSeat].name}</div>
               )}
             </div>
           )
         })()}
       </div>
 
+      {/* ── Control bar ── */}
       <div className="control-bar">
-        {snap.street === 'idle' && (
-          <div className="actions" style={{flexDirection:'column'}}>
-            <div className="waitmsg" style={{marginBottom:6}}>{snap.message || 'Table paused'}</div>
+        {!isGuestMode && displaySnap.street === 'idle' && (
+          <div className="actions" style={{ flexDirection: 'column' }}>
+            <div className="waitmsg" style={{ marginBottom: 6 }}>{displaySnap.message || 'Table paused'}</div>
             <button className="btn" onClick={async () => {
-              if (game.players[0].stack < BB) {
-                const res = await fetch('/api/game/session', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ game:'refill', chips_wagered:0, chips_won:100000 }) })
-                if (res.ok) { const d = await res.json(); game.setPlayerStack(d.chips); showToast('Topped up!','win') }
+              if (game && game.players[0].stack < BB) {
+                const res = await fetch('/api/game/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ game: 'refill', chips_wagered: 0, chips_won: 100000 }) })
+                if (res.ok) { const d = await res.json(); game.setPlayerStack(d.chips); showToast('Topped up!', 'win') }
               }
               startHand()
             }}>
-              {game.players[0].stack < BB ? 'Refill & Deal' : 'Deal In'}
+              {game && game.players[0].stack < BB ? 'Refill & Deal' : 'Deal In'}
             </button>
           </div>
         )}
 
-        {youToAct && legal && (
+        {isGuestMode && displaySnap.street === 'idle' && (
+          <div className="waitmsg"><span className="spin" />Waiting for host to deal…</div>
+        )}
+
+        {heroToAct && activeLegal && (
           <>
             <div className="actions">
-              <button className="btn btn-danger" onClick={() => act('fold')}>Fold</button>
-              {legal.canCheck
-                ? <button className="btn btn-ghost" onClick={() => act('check')}>Check</button>
-                : <button className="btn btn-ghost" onClick={() => act('call')}>Call {fmtShort(legal.toCall)}</button>
+              <button className="btn btn-danger" onClick={() => doAct('fold')}>Fold</button>
+              {activeLegal.canCheck
+                ? <button className="btn btn-ghost" onClick={() => doAct('check')}>Check</button>
+                : <button className="btn btn-ghost" onClick={() => doAct('call')}>Call {fmtShort(activeLegal.toCall)}</button>
               }
             </div>
-            {legal.canRaise && (
+            {activeLegal.canRaise && (
               <div className="raise-box">
                 <div className="raise-top">
                   <input
                     type="number"
-                    min={legal.minRaiseTo}
-                    max={legal.maxRaiseTo}
+                    min={activeLegal.minRaiseTo}
+                    max={activeLegal.maxRaiseTo}
                     step={BB}
                     value={raiseTo || ''}
-                    placeholder={fmt(legal.minRaiseTo)}
+                    placeholder={fmt(activeLegal.minRaiseTo)}
                     onChange={e => setRaiseTo(parseInt(e.target.value, 10) || 0)}
                     onBlur={() => setRaiseTo(safeRaise)}
-                    onKeyDown={e => { if (e.key === 'Enter') act(safeRaise >= legal.maxRaiseTo ? 'allin' : 'raise', safeRaise) }}
+                    onKeyDown={e => { if (e.key === 'Enter') doAct(safeRaise >= activeLegal.maxRaiseTo ? 'allin' : 'raise', safeRaise) }}
                   />
                 </div>
                 <div className="quick">
-                  <button onClick={() => setRaiseTo(Math.min(legal.maxRaiseTo, Math.max(legal.minRaiseTo, Math.round((legal.pot*0.5)/BB)*BB + legal.toCall)))}>½ Pot</button>
-                  <button onClick={() => setRaiseTo(Math.min(legal.maxRaiseTo, Math.max(legal.minRaiseTo, Math.round(legal.pot/BB)*BB + legal.toCall)))}>Pot</button>
-                  <button onClick={() => setRaiseTo(legal.maxRaiseTo)}>All-in</button>
+                  <button onClick={() => setRaiseTo(Math.min(activeLegal.maxRaiseTo, Math.max(activeLegal.minRaiseTo, Math.round((activeLegal.pot * 0.5) / BB) * BB + activeLegal.toCall)))}>½ Pot</button>
+                  <button onClick={() => setRaiseTo(Math.min(activeLegal.maxRaiseTo, Math.max(activeLegal.minRaiseTo, Math.round(activeLegal.pot / BB) * BB + activeLegal.toCall)))}>Pot</button>
+                  <button onClick={() => setRaiseTo(activeLegal.maxRaiseTo)}>All-in</button>
                 </div>
               </div>
             )}
-            {legal.canRaise && (
+            {activeLegal.canRaise && (
               <div className="actions">
-                <button className="btn" onClick={() => act(safeRaise >= legal.maxRaiseTo ? 'allin' : 'raise', safeRaise)}>
-                  {legal.canCheck && legal.toCall === 0 ? 'Bet' : 'Raise to'} {fmtShort(safeRaise)}
+                <button className="btn" onClick={() => doAct(safeRaise >= activeLegal.maxRaiseTo ? 'allin' : 'raise', safeRaise)}>
+                  {activeLegal.canCheck && activeLegal.toCall === 0 ? 'Bet' : 'Raise to'} {fmtShort(safeRaise)}
                 </button>
               </div>
             )}
           </>
         )}
 
-        {!youToAct && snap.street !== 'idle' && !showResult && (
+        {!heroToAct && displaySnap.street !== 'idle' && !showResult && (
           <div className="waitmsg">
             <span className="spin" />
-            {dealing ? 'Dealing…' : (game.players[snap.toAct] ? game.players[snap.toAct].name+' is deciding…' : '…')}
+            {dealing ? 'Dealing…' : (displayPlayers[displaySnap.toAct]?.name + ' is deciding…')}
           </div>
         )}
 
         {showResult && (
-          <div className="actions" style={{flexDirection:'column'}}>
-            <div className="waitmsg" style={{marginBottom:4}}>{snap.message}</div>
-            <button className="btn" onClick={() => startHand()}>Next Hand →</button>
+          <div className="actions" style={{ flexDirection: 'column' }}>
+            <div className="waitmsg" style={{ marginBottom: 4 }}>{displaySnap.message}</div>
+            {!isGuestMode
+              ? <button className="btn" onClick={() => startHand()}>Next Hand →</button>
+              : <div className="waitmsg" style={{ fontSize: 12 }}><span className="spin" />Waiting for next hand…</div>
+            }
           </div>
         )}
       </div>
 
+      {/* Waiting for guest banner */}
+      {waitingForGuest && (
+        <div style={{ position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)', zIndex: 50, background: 'rgba(11,10,7,.92)', border: '1px solid rgba(217,182,90,.35)', borderRadius: 14, padding: '12px 24px', fontFamily: 'var(--fs-head)', fontSize: 13, color: 'var(--cream-dim)', letterSpacing: '.06em', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ width: 14, height: 14, border: '2px solid rgba(217,182,90,.3)', borderTopColor: 'var(--gold)', borderRadius: '50%', display: 'inline-block', animation: 'spin360 .8s linear infinite' }} />
+          Waiting for friend to join with code <strong style={{ color: 'var(--gold-l)', letterSpacing: '.1em' }}>{prettyCode(inviteCode)}</strong>…
+        </div>
+      )}
+
+      {/* Invite modal */}
       {showInvite && (
         <div className="modal-bg" onClick={() => setShowInvite(false)}>
           <div className="modal gilt" onClick={e => e.stopPropagation()}>
             <button className="x" onClick={() => setShowInvite(false)}>×</button>
-            <h2 className="gold-text">Invite to your table</h2>
-            <p>Share this code with a friend and they&apos;ll join your Poker table.</p>
-            <div style={{textAlign:'center',margin:'18px 0'}}>
-              <div style={{fontFamily:'var(--fs-head)',fontSize:36,fontWeight:800,letterSpacing:'.15em',color:'var(--gold-l)',background:'rgba(0,0,0,.4)',border:'1px solid rgba(217,182,90,.3)',borderRadius:14,padding:'18px 28px',display:'inline-block'}}>{prettyCode(inviteCode)}</div>
+            <h2 className="gold-text">Invite a friend</h2>
+            <p>Share this code. Your friend enters it in the lobby&apos;s <strong style={{ color: 'var(--cream)' }}>Join Game</strong> button, and they&apos;ll sit at your table and replace a bot.</p>
+            <div style={{ textAlign: 'center', margin: '18px 0' }}>
+              <div style={{ fontFamily: 'var(--fs-head)', fontSize: 36, fontWeight: 800, letterSpacing: '.15em', color: 'var(--gold-l)', background: 'rgba(0,0,0,.4)', border: '1px solid rgba(217,182,90,.3)', borderRadius: 14, padding: '18px 28px', display: 'inline-block' }}>
+                {prettyCode(inviteCode)}
+              </div>
             </div>
             <div className="invite-field">
-              <button className="btn" style={{flex:1}} onClick={() => { navigator.clipboard.writeText(prettyCode(inviteCode)).then(() => showToast('Code copied!','win')) }}>Copy Code</button>
+              <button className="btn" style={{ flex: 1 }} onClick={() => navigator.clipboard.writeText(prettyCode(inviteCode)).then(() => showToast('Code copied!', 'win'))}>
+                Copy Code
+              </button>
             </div>
-            <div className="seatnote">Blinds 500 / 1,000 · No-limit · 6 seats. Your chips carry across every HouseTables table.</div>
+            <div className="seatnote">
+              {waitingForGuest
+                ? '⏳ Waiting for your friend to join…'
+                : guestConnected
+                ? '✓ Friend is connected — playing live!'
+                : 'Blinds 500 / 1,000 · No-limit · 6 seats.'}
+            </div>
           </div>
         </div>
       )}
 
+      {/* Help modal */}
       {showHelp && (
         <div className="modal-bg" onClick={() => setShowHelp(false)}>
-          <div className="modal gilt" onClick={e => e.stopPropagation()} style={{maxHeight:'85vh',overflowY:'auto',width:520}}>
+          <div className="modal gilt" onClick={e => e.stopPropagation()} style={{ maxHeight: '85vh', overflowY: 'auto', width: 520 }}>
             <button className="x" onClick={() => setShowHelp(false)}>×</button>
             <h2 className="gold-text">How to Play Texas Hold&apos;em</h2>
-            <div style={{display:'flex',flexDirection:'column',gap:12,color:'var(--cream-dim)',fontSize:14,lineHeight:1.65}}>
-              <p><strong style={{color:'var(--cream)'}}>Objective:</strong> Make the best 5-card hand using any combination of your 2 hole cards and 5 community cards.</p>
-              <p><strong style={{color:'var(--cream)'}}>Blinds:</strong> Each hand starts with a Small Blind (500) and Big Blind (1,000) posted by two players. This seeds the pot.</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, color: 'var(--cream-dim)', fontSize: 14, lineHeight: 1.65 }}>
+              <p><strong style={{ color: 'var(--cream)' }}>Objective:</strong> Make the best 5-card hand using any combination of your 2 hole cards and 5 community cards.</p>
+              <p><strong style={{ color: 'var(--cream)' }}>Blinds:</strong> Each hand starts with a Small Blind (500) and Big Blind (1,000) posted by two players.</p>
               <div>
-                <strong style={{color:'var(--cream)'}}>The Streets:</strong>
-                <ul style={{margin:'8px 0 0 16px',display:'flex',flexDirection:'column',gap:4}}>
-                  <li><strong style={{color:'var(--cream)'}}>Preflop</strong> — you receive 2 hole cards; first round of betting.</li>
-                  <li><strong style={{color:'var(--cream)'}}>Flop</strong> — 3 community cards revealed; second betting round.</li>
-                  <li><strong style={{color:'var(--cream)'}}>Turn</strong> — 1 more community card; third betting round.</li>
-                  <li><strong style={{color:'var(--cream)'}}>River</strong> — final community card; last betting round.</li>
-                  <li><strong style={{color:'var(--cream)'}}>Showdown</strong> — remaining players reveal hands; best hand wins.</li>
+                <strong style={{ color: 'var(--cream)' }}>The Streets:</strong>
+                <ul style={{ margin: '8px 0 0 16px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <li><strong style={{ color: 'var(--cream)' }}>Preflop</strong> — 2 hole cards dealt; first betting round.</li>
+                  <li><strong style={{ color: 'var(--cream)' }}>Flop</strong> — 3 community cards; second betting round.</li>
+                  <li><strong style={{ color: 'var(--cream)' }}>Turn</strong> — 1 more card; third betting round.</li>
+                  <li><strong style={{ color: 'var(--cream)' }}>River</strong> — final card; last betting round.</li>
+                  <li><strong style={{ color: 'var(--cream)' }}>Showdown</strong> — best hand wins.</li>
                 </ul>
               </div>
               <div>
-                <strong style={{color:'var(--cream)'}}>Your Actions:</strong>
-                <ul style={{margin:'8px 0 0 16px',display:'flex',flexDirection:'column',gap:4}}>
-                  <li><strong style={{color:'var(--cream)'}}>Fold</strong> — give up your hand (lose any chips already in the pot).</li>
-                  <li><strong style={{color:'var(--cream)'}}>Check</strong> — pass action (only when no bet is facing you).</li>
-                  <li><strong style={{color:'var(--cream)'}}>Call</strong> — match the current bet.</li>
-                  <li><strong style={{color:'var(--cream)'}}>Raise</strong> — increase the bet using the slider.</li>
-                  <li><strong style={{color:'var(--cream)'}}>All-in</strong> — bet all your chips.</li>
-                </ul>
+                <strong style={{ color: 'var(--cream)' }}>Actions: </strong>
+                Fold · Check · Call · Raise · All-in
               </div>
               <div>
-                <strong style={{color:'var(--cream)'}}>Hand Rankings (best to worst):</strong>
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'4px 20px',margin:'8px 0 0 0',fontSize:13}}>
-                  {[['Royal Flush','A K Q J 10 suited'],['Straight Flush','5 in sequence, suited'],['Four of a Kind','4 matching ranks'],['Full House','3 of a kind + pair'],['Flush','5 cards same suit'],['Straight','5 in sequence'],['Three of a Kind','3 matching ranks'],['Two Pair','two pairs'],['Pair','two matching cards'],['High Card','none of the above']].map(([name,desc]) => (
-                    <div key={name}><span style={{color:'var(--gold-l)',fontWeight:600}}>{name}</span><span style={{color:'var(--cream-faint)',fontSize:11,display:'block'}}>{desc}</span></div>
+                <strong style={{ color: 'var(--cream)' }}>Hand Rankings:</strong>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 20px', margin: '8px 0 0 0', fontSize: 13 }}>
+                  {[['Royal Flush', 'A K Q J 10 suited'], ['Straight Flush', '5 suited in sequence'], ['Four of a Kind', '4 matching ranks'], ['Full House', '3 of a kind + pair'], ['Flush', '5 cards same suit'], ['Straight', '5 in sequence'], ['Three of a Kind', '3 matching ranks'], ['Two Pair', 'two pairs'], ['Pair', 'two matching cards'], ['High Card', 'none of the above']].map(([name, desc]) => (
+                    <div key={name}><span style={{ color: 'var(--gold-l)', fontWeight: 600 }}>{name}</span><span style={{ color: 'var(--cream-faint)', fontSize: 11, display: 'block' }}>{desc}</span></div>
                   ))}
                 </div>
               </div>
@@ -581,20 +807,17 @@ export default function PokerPage() {
         .invite-field { display:flex;gap:10px; }
         .invite-field input { flex:1;background:rgba(0,0,0,.4);border:1px solid rgba(217,182,90,.3);border-radius:10px;padding:0 14px;color:var(--gold-l);font-size:13px;height:46px; }
         .modal .x { position:absolute;top:16px;right:18px;background:none;border:none;color:var(--cream-faint);font-size:24px;cursor:pointer;line-height:1; }
+        .modal .x:hover { color:var(--gold-l); }
         .seatnote { margin-top:18px;font-size:12px;color:var(--cream-faint);line-height:1.5;border-top:1px solid rgba(217,182,90,.15);padding-top:14px; }
-        /* show/hide per breakpoint */
         .mob-only { display: none; }
         @media (max-width: 640px) {
           .desk-only { display: none !important; }
           .mob-only { display: flex !important; }
-          /* topbar */
           .topbar { padding: 10px 14px !important; }
           .topbar .title-c .t { font-size: 15px !important; }
           .topbar .title-c .s { display: none; }
           .topbar .right { gap: 8px !important; }
-          /* mobile table */
           .m-table { flex: 1; flex-direction: column; background: radial-gradient(180% 120% at 50% 0%, #8a1c30 0%, #6a1325 42%, #440b18 100%); padding: 10px 8px 6px; gap: 8px; overflow: hidden; min-height: 0; }
-          /* opponent strip */
           .m-opps { display: flex; gap: 7px; overflow-x: auto; flex: 0 0 auto; padding-bottom: 6px; scrollbar-width: none; }
           .m-opps::-webkit-scrollbar { display: none; }
           .m-opp { display: flex; flex-direction: column; align-items: center; gap: 3px; flex: 0 0 auto; width: 62px; padding: 6px 4px 10px; border-radius: 12px; background: rgba(0,0,0,.45); border: 1px solid rgba(217,182,90,.2); position: relative; transition: .2s; }
@@ -612,13 +835,11 @@ export default function PokerPage() {
           .m-opp-bet { position: absolute; bottom: -9px; left: 50%; transform: translateX(-50%); font-size: 9px; color: var(--gold-l); background: rgba(0,0,0,.75); border: 1px solid rgba(217,182,90,.45); padding: 1px 6px; border-radius: 6px; white-space: nowrap; z-index: 5; }
           .m-opp-act { position: absolute; top: -9px; left: 50%; transform: translateX(-50%); font-size: 8px; color: var(--cream-dim); background: rgba(0,0,0,.7); border: 1px solid rgba(217,182,90,.2); padding: 1px 5px; border-radius: 5px; white-space: nowrap; z-index: 5; }
           .m-btn-d { position: absolute; top: -9px; right: -6px; width: 18px; height: 18px; border-radius: 50%; background: var(--ivory); color: #1a130a; font-family: var(--fs-head); font-weight: 800; font-size: 9px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--gold-d); z-index: 6; }
-          /* board area */
           .m-board-area { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; min-height: 0; }
           .m-result-banner { font-family: var(--fs-display); font-weight: 900; font-size: 18px; padding: 9px 22px; border-radius: 12px; background: var(--gold-grad); color: #2a1f08; box-shadow: 0 10px 30px rgba(0,0,0,.5); text-align: center; }
           .m-board-area .board { gap: 5px !important; }
           .m-board-area .board .card { --w: 54px !important; }
           .m-board-area .board .slot { width: 54px !important; height: 76px !important; }
-          /* your seat */
           .m-you { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; background: rgba(0,0,0,.55); border: 1px solid rgba(217,182,90,.35); border-radius: 16px; position: relative; transition: .2s; }
           .m-you.active { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(217,182,90,.4); }
           .m-you.winner { border-color: var(--gold); box-shadow: 0 0 20px rgba(217,182,90,.55); }
@@ -629,7 +850,6 @@ export default function PokerPage() {
           .m-you-cards { display: flex; gap: 6px; }
           .m-you-cards .card { --w: 58px !important; }
           .m-hand-name { position: absolute; bottom: -10px; left: 50%; transform: translateX(-50%); font-size: 9px; letter-spacing: .06em; background: var(--gold-grad); color: #2a1f08; font-weight: 800; padding: 2px 8px; border-radius: 6px; white-space: nowrap; z-index: 8; text-transform: uppercase; }
-          /* control bar */
           .control-bar { flex-wrap: wrap; gap: 8px !important; padding: 10px 12px 14px !important; min-height: unset !important; }
           .actions .btn { min-width: 80px !important; font-size: 13px !important; padding: 12px 14px !important; flex: 1; }
           .raise-box { width: 100% !important; }

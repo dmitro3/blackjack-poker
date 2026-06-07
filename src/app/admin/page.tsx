@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
 function fmt(n: number) { return Number(n).toLocaleString('en-US') }
+function fmtPnl(n: number) { return (n >= 0 ? '+' : '') + fmt(n) }
 
 interface Profile {
   id: string
@@ -19,7 +20,44 @@ interface Profile {
   created_at: string
 }
 
+interface Session {
+  user_id: string
+  game: string
+  chips_wagered: number
+  chips_won: number
+  created_at: string
+}
+
 interface GameStat { game: string; count: number; total_wagered: number; total_won: number }
+
+interface PlayerGameStat { game: string; count: number; wagered: number; won: number }
+
+function getOnlineStatus(lastLogin: string | null): 'online' | 'recent' | 'offline' {
+  if (!lastLogin) return 'offline'
+  const diff = Date.now() - new Date(lastLogin).getTime()
+  if (diff < 5 * 60 * 1000) return 'online'
+  if (diff < 60 * 60 * 1000) return 'recent'
+  return 'offline'
+}
+
+function statusColor(s: 'online' | 'recent' | 'offline') {
+  return s === 'online' ? '#5fd99a' : s === 'recent' ? '#d9b65a' : '#6b6555'
+}
+
+function statusLabel(s: 'online' | 'recent' | 'offline') {
+  return s === 'online' ? 'Online' : s === 'recent' ? 'Recently Active' : 'Offline'
+}
+
+function timeAgo(ts: string | null) {
+  if (!ts) return 'Never'
+  const diff = Date.now() - new Date(ts).getTime()
+  const m = Math.floor(diff / 60000)
+  if (m < 1) return 'Just now'
+  if (m < 60) return `${m}m ago`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ago`
+  return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
 
 function Toast({ msg, kind, onDone }: { msg: string; kind: string; onDone: () => void }) {
   useEffect(() => { const t = setTimeout(onDone, 2000); return () => clearTimeout(t) }, [onDone])
@@ -27,9 +65,197 @@ function Toast({ msg, kind, onDone }: { msg: string; kind: string; onDone: () =>
   return <div style={{ position: 'fixed', left: '50%', bottom: 38, transform: 'translateX(-50%)', zIndex: 9999, padding: '13px 26px', borderRadius: 999, fontFamily: 'Cinzel,serif', fontWeight: 600, letterSpacing: '.05em', boxShadow: '0 14px 40px rgba(0,0,0,.5)', border: '1px solid rgba(217,182,90,.5)', background: bg, color: kind === 'win' ? '#2a1f08' : 'var(--cream)', animation: 'floatUp .35s' }}>{msg}</div>
 }
 
+function PlayerDetailPanel({
+  player,
+  playerGames,
+  onClose,
+  onBan,
+}: {
+  player: Profile
+  playerGames: PlayerGameStat[]
+  onClose: () => void
+  onBan: (id: string, banned: boolean) => void
+}) {
+  const status = getOnlineStatus(player.last_login)
+  const netPnl = (player.total_won || 0) - (player.total_wagered || 0)
+  const totalLost = Math.max(0, (player.total_wagered || 0) - (player.total_won || 0))
+  const mostPlayed = playerGames.length > 0 ? playerGames[0].game : null
+  const totalRounds = playerGames.reduce((s, g) => s + g.count, 0)
+
+  const GAME_ICONS: Record<string, string> = {
+    blackjack: '🃏', poker: '♠', roulette: '🎰', slots: '🎰', baccarat: '🎴',
+  }
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end',
+    }}>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.6)', backdropFilter: 'blur(4px)' }} onClick={onClose} />
+      <div style={{
+        position: 'relative', width: 420, height: '100vh', overflowY: 'auto',
+        background: 'linear-gradient(180deg, #1a1510 0%, #0b0a07 100%)',
+        borderLeft: '1px solid rgba(217,182,90,.25)',
+        boxShadow: '-24px 0 80px rgba(0,0,0,.7)',
+        padding: 28,
+        display: 'flex', flexDirection: 'column', gap: 24,
+      }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontFamily: 'var(--fs-display)', fontWeight: 900, fontSize: 22, color: 'var(--cream)', marginBottom: 4 }}>
+              {player.display_name || 'Unknown'}
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--cream-faint)', marginBottom: 8 }}>{player.email}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{
+                width: 8, height: 8, borderRadius: '50%', background: statusColor(status), display: 'inline-block',
+                boxShadow: status === 'online' ? `0 0 6px ${statusColor(status)}` : 'none',
+              }} />
+              <span style={{ fontSize: 12, color: statusColor(status), fontFamily: 'var(--fs-head)', letterSpacing: '.08em' }}>
+                {statusLabel(status)}
+              </span>
+              <span style={{ fontSize: 12, color: 'var(--cream-faint)' }}>· {timeAgo(player.last_login)}</span>
+            </div>
+          </div>
+          <button onClick={onClose} style={{
+            background: 'rgba(255,255,255,.05)', border: '1px solid rgba(217,182,90,.2)', borderRadius: 8,
+            color: 'var(--cream-faint)', cursor: 'pointer', fontSize: 18, width: 36, height: 36,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>×</button>
+        </div>
+
+        {/* Divider */}
+        <div style={{ height: 1, background: 'rgba(217,182,90,.15)' }} />
+
+        {/* Key stats grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          {[
+            { label: 'Balance', value: fmt(player.chips || 0), color: 'var(--gold-l)' },
+            { label: 'Total Rounds', value: fmt(totalRounds), color: 'var(--cream)' },
+            { label: 'Total Wagered', value: fmt(player.total_wagered || 0), color: 'var(--cream-dim)' },
+            { label: 'Total Won', value: fmt(player.total_won || 0), color: '#5fd99a' },
+            { label: 'Total Lost', value: fmt(totalLost), color: '#e7708a' },
+            { label: 'Net P&L', value: fmtPnl(netPnl), color: netPnl >= 0 ? '#5fd99a' : '#e7708a' },
+          ].map(s => (
+            <div key={s.label} style={{
+              background: 'rgba(0,0,0,.4)', border: '1px solid rgba(217,182,90,.12)',
+              borderRadius: 10, padding: '12px 14px',
+            }}>
+              <div style={{ fontSize: 10, letterSpacing: '.2em', color: 'var(--cream-faint)', textTransform: 'uppercase', fontFamily: 'var(--fs-head)', marginBottom: 5 }}>{s.label}</div>
+              <div style={{ fontWeight: 700, fontSize: 18, color: s.color, fontVariantNumeric: 'tabular-nums' }}>{s.value}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Game breakdown */}
+        <div>
+          <div style={{ fontFamily: 'var(--fs-head)', fontSize: 11, letterSpacing: '.2em', color: 'var(--cream-faint)', textTransform: 'uppercase', marginBottom: 14 }}>
+            Game History
+          </div>
+          {playerGames.length === 0 ? (
+            <div style={{ color: 'var(--cream-faint)', fontSize: 13, padding: '12px 0' }}>No games played yet.</div>
+          ) : playerGames.map((g, i) => {
+            const gamePnl = g.won - g.wagered
+            return (
+              <div key={g.game} style={{
+                display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0',
+                borderBottom: i < playerGames.length - 1 ? '1px solid rgba(217,182,90,.08)' : 'none',
+              }}>
+                <div style={{
+                  width: 36, height: 36, borderRadius: 8, background: 'rgba(217,182,90,.1)',
+                  border: '1px solid rgba(217,182,90,.2)', display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', fontSize: 16, flexShrink: 0,
+                }}>
+                  {GAME_ICONS[g.game] || '🎲'}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontWeight: 700, textTransform: 'capitalize', fontSize: 14 }}>{g.game}</span>
+                    <span style={{ color: gamePnl >= 0 ? '#5fd99a' : '#e7708a', fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                      {fmtPnl(gamePnl)}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 12, marginTop: 3 }}>
+                    <span style={{ fontSize: 11, color: 'var(--cream-faint)' }}>{fmt(g.count)} rounds</span>
+                    <span style={{ fontSize: 11, color: 'var(--cream-faint)' }}>Wagered: {fmt(g.wagered)}</span>
+                  </div>
+                  {/* Mini bar */}
+                  <div style={{ marginTop: 6, height: 3, borderRadius: 999, background: 'rgba(255,255,255,.06)' }}>
+                    <div style={{
+                      height: '100%', borderRadius: 999,
+                      background: gamePnl >= 0 ? '#5fd99a' : '#e7708a',
+                      width: `${Math.min(100, (g.won / Math.max(g.wagered, 1)) * 100)}%`,
+                      transition: 'width .4s',
+                    }} />
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Most played badge */}
+        {mostPlayed && (
+          <div style={{
+            background: 'rgba(217,182,90,.06)', border: '1px solid rgba(217,182,90,.2)',
+            borderRadius: 10, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10,
+          }}>
+            <span style={{ fontSize: 20 }}>{GAME_ICONS[mostPlayed] || '🎲'}</span>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--cream-faint)', letterSpacing: '.1em', fontFamily: 'var(--fs-head)', textTransform: 'uppercase' }}>Favourite Game</div>
+              <div style={{ fontWeight: 700, textTransform: 'capitalize', marginTop: 2 }}>{mostPlayed}</div>
+            </div>
+          </div>
+        )}
+
+        {/* Info */}
+        <div style={{ fontSize: 12, color: 'var(--cream-faint)', lineHeight: 1.6 }}>
+          <div>Joined: {new Date(player.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</div>
+          {player.is_admin && <div style={{ color: 'var(--gold)', marginTop: 2 }}>Administrator</div>}
+          {player.is_banned && <div style={{ color: '#e7708a', marginTop: 2 }}>Account Suspended</div>}
+        </div>
+
+        {/* Action buttons */}
+        {!player.is_admin && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 'auto', paddingTop: 8 }}>
+            {status !== 'offline' && (
+              <Link
+                href={mostPlayed ? `/${mostPlayed}` : '/'}
+                style={{
+                  display: 'block', textAlign: 'center', padding: '12px 0',
+                  background: 'rgba(217,182,90,.1)', border: '1px solid rgba(217,182,90,.3)',
+                  borderRadius: 10, color: 'var(--gold-l)', fontFamily: 'var(--fs-head)',
+                  fontSize: 13, letterSpacing: '.1em', textTransform: 'uppercase', textDecoration: 'none',
+                  fontWeight: 700,
+                }}
+              >
+                Spectate {mostPlayed ? `→ ${mostPlayed}` : ''}
+              </Link>
+            )}
+            <button
+              onClick={() => { onBan(player.id, !player.is_banned); onClose() }}
+              style={{
+                padding: '12px 0', borderRadius: 10, cursor: 'pointer',
+                background: player.is_banned ? 'rgba(95,217,154,.15)' : 'rgba(163,20,43,.25)',
+                color: player.is_banned ? '#5fd99a' : '#e7708a',
+                fontFamily: 'var(--fs-head)', fontSize: 13, letterSpacing: '.1em',
+                textTransform: 'uppercase', fontWeight: 700,
+                border: player.is_banned ? '1px solid rgba(95,217,154,.3)' : '1px solid rgba(231,112,138,.3)',
+              } as React.CSSProperties}
+            >
+              {player.is_banned ? 'Reinstate Player' : 'Kick & Suspend'}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function AdminPage() {
   const [players, setPlayers] = useState<Profile[]>([])
   const [gameStats, setGameStats] = useState<GameStat[]>([])
+  const [sessionsByUser, setSessionsByUser] = useState<Record<string, PlayerGameStat[]>>({})
   const [refillEnabled, setRefillEnabled] = useState(true)
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState<{ msg: string; kind: string } | null>(null)
@@ -39,6 +265,7 @@ export default function AdminPage() {
   const [refreshing, setRefreshing] = useState(false)
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null)
   const [countdown, setCountdown] = useState(30)
+  const [selectedPlayer, setSelectedPlayer] = useState<Profile | null>(null)
   const router = useRouter()
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -57,6 +284,7 @@ export default function AdminPage() {
     setPlayers(data.players)
     setRefillEnabled(data.refillEnabled)
 
+    // Build aggregate game stats
     const map: Record<string, GameStat> = {}
     for (const s of data.sessions) {
       if (!map[s.game]) map[s.game] = { game: s.game, count: 0, total_wagered: 0, total_won: 0 }
@@ -65,6 +293,22 @@ export default function AdminPage() {
       map[s.game].total_won += s.chips_won
     }
     setGameStats(Object.values(map).sort((a, b) => b.count - a.count))
+
+    // Build per-player game stats
+    const userGameMap: Record<string, Record<string, PlayerGameStat>> = {}
+    for (const s of data.sessions) {
+      if (!s.user_id) continue
+      if (!userGameMap[s.user_id]) userGameMap[s.user_id] = {}
+      if (!userGameMap[s.user_id][s.game]) userGameMap[s.user_id][s.game] = { game: s.game, count: 0, wagered: 0, won: 0 }
+      userGameMap[s.user_id][s.game].count++
+      userGameMap[s.user_id][s.game].wagered += s.chips_wagered
+      userGameMap[s.user_id][s.game].won += s.chips_won
+    }
+    const byUser: Record<string, PlayerGameStat[]> = {}
+    for (const [uid, games] of Object.entries(userGameMap)) {
+      byUser[uid] = Object.values(games).sort((a, b) => b.count - a.count)
+    }
+    setSessionsByUser(byUser)
 
     setLoading(false)
     setRefreshing(false)
@@ -126,6 +370,13 @@ export default function AdminPage() {
   const totalWagered = players.reduce((s, p) => s + (p.total_wagered || 0), 0)
   const totalWon = players.reduce((s, p) => s + (p.total_won || 0), 0)
   const houseProfit = totalWagered - totalWon
+  const totalLostByPlayers = players.reduce((s, p) => s + Math.max(0, (p.total_wagered || 0) - (p.total_won || 0)), 0)
+
+  // Sort players by who lost the most
+  const topLosers = [...players]
+    .filter(p => (p.total_wagered || 0) > 0)
+    .sort((a, b) => ((b.total_wagered || 0) - (b.total_won || 0)) - ((a.total_wagered || 0) - (a.total_won || 0)))
+    .slice(0, 5)
 
   const panelStyle = {
     border: '1px solid rgba(217,182,90,.35)',
@@ -153,6 +404,15 @@ export default function AdminPage() {
   return (
     <div style={{ minHeight: '100vh', padding: '0 0 80px' }}>
       {toast && <Toast msg={toast.msg} kind={toast.kind} onDone={() => setToast(null)} />}
+
+      {selectedPlayer && (
+        <PlayerDetailPanel
+          player={selectedPlayer}
+          playerGames={sessionsByUser[selectedPlayer.id] || []}
+          onClose={() => setSelectedPlayer(null)}
+          onBan={handleBan}
+        />
+      )}
 
       {/* Topbar */}
       <header style={{
@@ -186,7 +446,7 @@ export default function AdminPage() {
           {[
             { label: 'Total Players', value: players.length, color: 'var(--gold-l)' },
             { label: 'Total Wagered', value: fmt(totalWagered), color: 'var(--gold-l)' },
-            { label: 'Players Won', value: fmt(totalWon), color: '#5fd99a' },
+            { label: 'Player Losses', value: fmt(totalLostByPlayers), color: '#e7708a' },
             { label: 'House Profit', value: (houseProfit >= 0 ? '+' : '-') + fmt(Math.abs(houseProfit)), color: houseProfit >= 0 ? '#5fd99a' : '#e7708a' },
           ].map(s => (
             <div key={s.label} style={{ ...panelStyle, padding: 20 }}>
@@ -229,49 +489,62 @@ export default function AdminPage() {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid rgba(217,182,90,.2)' }}>
-                    {['Player', 'Chips', 'Wagered', 'Won', 'Last Login', 'Status', 'Actions'].map(h => (
+                    {['Player', 'Status', 'Chips', 'Wagered', 'Won', 'Lost', 'Net P&L', 'Actions'].map(h => (
                       <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontFamily: 'var(--fs-head)', fontSize: 11, letterSpacing: '.15em', color: 'var(--cream-faint)', textTransform: 'uppercase', fontWeight: 600 }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {players.map(p => (
-                    <tr key={p.id} style={{ borderBottom: '1px solid rgba(217,182,90,.08)', opacity: p.is_banned ? .5 : 1 }}>
-                      <td style={{ padding: '14px', fontSize: 14 }}>
-                        <div style={{ fontWeight: 700, color: 'var(--cream)' }}>{p.display_name || 'Unknown'}</div>
-                        <div style={{ fontSize: 12, color: 'var(--cream-faint)', marginTop: 2 }}>{p.email}</div>
-                        {p.is_admin && <span style={{ fontSize: 10, letterSpacing: '.1em', color: 'var(--gold)', fontFamily: 'var(--fs-head)', textTransform: 'uppercase' }}>Admin</span>}
-                      </td>
-                      <td style={{ padding: '14px', fontVariantNumeric: 'tabular-nums', color: 'var(--gold-l)', fontWeight: 700 }}>{fmt(p.chips || 0)}</td>
-                      <td style={{ padding: '14px', fontVariantNumeric: 'tabular-nums', color: 'var(--cream-dim)' }}>{fmt(p.total_wagered || 0)}</td>
-                      <td style={{ padding: '14px', fontVariantNumeric: 'tabular-nums', color: '#5fd99a' }}>{fmt(p.total_won || 0)}</td>
-                      <td style={{ padding: '14px', fontSize: 12, color: 'var(--cream-faint)' }}>
-                        {p.last_login ? new Date(p.last_login).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Never'}
-                      </td>
-                      <td style={{ padding: '14px' }}>
-                        <span style={{
-                          fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase',
-                          padding: '4px 10px', borderRadius: 999, fontFamily: 'var(--fs-head)',
-                          background: p.is_banned ? 'rgba(163,20,43,.25)' : 'rgba(58,208,122,.15)',
-                          color: p.is_banned ? '#e7708a' : '#5fd99a',
-                          border: `1px solid ${p.is_banned ? 'rgba(231,112,138,.3)' : 'rgba(95,217,154,.3)'}`,
-                        }}>
-                          {p.is_banned ? 'Suspended' : 'Active'}
-                        </span>
-                      </td>
-                      <td style={{ padding: '14px' }}>
-                        {!p.is_admin && (
+                  {players.map(p => {
+                    const status = getOnlineStatus(p.last_login)
+                    const netPnl = (p.total_won || 0) - (p.total_wagered || 0)
+                    const totalLost = Math.max(0, (p.total_wagered || 0) - (p.total_won || 0))
+                    return (
+                      <tr key={p.id} style={{ borderBottom: '1px solid rgba(217,182,90,.08)', opacity: p.is_banned ? .5 : 1 }}>
+                        <td style={{ padding: '14px' }}>
                           <button
-                            className={`btn btn-sm ${p.is_banned ? '' : 'btn-danger'}`}
-                            style={{ fontSize: 11, padding: '7px 14px' }}
-                            onClick={() => handleBan(p.id, !p.is_banned)}
+                            onClick={() => setSelectedPlayer(p)}
+                            style={{
+                              background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0,
+                            }}
                           >
-                            {p.is_banned ? 'Reinstate' : 'Suspend'}
+                            <div style={{ fontWeight: 700, color: 'var(--gold-l)', textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 3 }}>
+                              {p.display_name || 'Unknown'}
+                            </div>
+                            <div style={{ fontSize: 12, color: 'var(--cream-faint)', marginTop: 2 }}>{p.email}</div>
+                            {p.is_admin && <span style={{ fontSize: 10, letterSpacing: '.1em', color: 'var(--gold)', fontFamily: 'var(--fs-head)', textTransform: 'uppercase' }}>Admin</span>}
                           </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td style={{ padding: '14px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{
+                              width: 7, height: 7, borderRadius: '50%', background: statusColor(status), flexShrink: 0,
+                              boxShadow: status === 'online' ? `0 0 5px ${statusColor(status)}` : 'none',
+                            }} />
+                            <span style={{ fontSize: 11, color: statusColor(status), fontFamily: 'var(--fs-head)', letterSpacing: '.05em', whiteSpace: 'nowrap' }}>
+                              {status === 'online' ? 'Online' : status === 'recent' ? 'Recent' : 'Offline'}
+                            </span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '14px', fontVariantNumeric: 'tabular-nums', color: 'var(--gold-l)', fontWeight: 700 }}>{fmt(p.chips || 0)}</td>
+                        <td style={{ padding: '14px', fontVariantNumeric: 'tabular-nums', color: 'var(--cream-dim)' }}>{fmt(p.total_wagered || 0)}</td>
+                        <td style={{ padding: '14px', fontVariantNumeric: 'tabular-nums', color: '#5fd99a' }}>{fmt(p.total_won || 0)}</td>
+                        <td style={{ padding: '14px', fontVariantNumeric: 'tabular-nums', color: '#e7708a', fontWeight: totalLost > 0 ? 700 : 400 }}>{fmt(totalLost)}</td>
+                        <td style={{ padding: '14px', fontVariantNumeric: 'tabular-nums', color: netPnl >= 0 ? '#5fd99a' : '#e7708a', fontWeight: 700 }}>{fmtPnl(netPnl)}</td>
+                        <td style={{ padding: '14px' }}>
+                          {!p.is_admin && (
+                            <button
+                              className={`btn btn-sm ${p.is_banned ? '' : 'btn-danger'}`}
+                              style={{ fontSize: 11, padding: '7px 14px' }}
+                              onClick={() => handleBan(p.id, !p.is_banned)}
+                            >
+                              {p.is_banned ? 'Reinstate' : 'Suspend'}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -280,83 +553,156 @@ export default function AdminPage() {
 
         {/* Stats tab */}
         {activeTab === 'stats' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+            {/* Top Games */}
             <div style={panelStyle}>
               <h2 style={{ fontFamily: 'var(--fs-head)', fontWeight: 700, fontSize: 20, margin: '0 0 20px' }}>
-                <span className="gold-text">Game Breakdown</span>
+                <span className="gold-text">Top Games by Popularity</span>
               </h2>
               {gameStats.length === 0 ? (
                 <p style={{ color: 'var(--cream-faint)', fontSize: 14 }}>No game sessions recorded yet.</p>
-              ) : gameStats.map(g => {
-                const profit = g.total_wagered - g.total_won
-                return (
-                  <div key={g.game} style={{ padding: '16px 0', borderBottom: '1px solid rgba(217,182,90,.1)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                      <span style={{ fontFamily: 'var(--fs-head)', fontWeight: 700, fontSize: 16, textTransform: 'capitalize' }}>{g.game}</span>
-                      <span style={{ fontSize: 12, color: 'var(--cream-faint)', fontFamily: 'var(--fs-head)', letterSpacing: '.1em' }}>{fmt(g.count)} rounds</span>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
-                      {[
-                        { l: 'Wagered', v: fmt(g.total_wagered), c: 'var(--cream-dim)' },
-                        { l: 'Won by Players', v: fmt(g.total_won), c: '#5fd99a' },
-                        { l: 'House Edge', v: (profit >= 0 ? '+' : '') + fmt(profit), c: profit >= 0 ? '#5fd99a' : '#e7708a' },
-                      ].map(s => (
-                        <div key={s.l} style={{ background: 'rgba(0,0,0,.3)', borderRadius: 8, padding: '10px 12px' }}>
-                          <div style={{ fontSize: 10, letterSpacing: '.15em', color: 'var(--cream-faint)', textTransform: 'uppercase', fontFamily: 'var(--fs-head)', marginBottom: 4 }}>{s.l}</div>
-                          <div style={{ fontWeight: 700, color: s.c, fontVariantNumeric: 'tabular-nums' }}>{s.v}</div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16 }}>
+                  {gameStats.map((g, i) => {
+                    const profit = g.total_wagered - g.total_won
+                    const winRate = g.total_wagered > 0 ? ((g.total_won / g.total_wagered) * 100).toFixed(1) : '0.0'
+                    const ICONS: Record<string, string> = { blackjack: '🃏', poker: '♠', roulette: '🎰', slots: '🎰', baccarat: '🎴' }
+                    return (
+                      <div key={g.game} style={{
+                        background: 'rgba(0,0,0,.35)', border: i === 0 ? '1px solid rgba(217,182,90,.4)' : '1px solid rgba(217,182,90,.12)',
+                        borderRadius: 12, padding: '20px 18px', position: 'relative', overflow: 'hidden',
+                      }}>
+                        {i === 0 && (
+                          <div style={{
+                            position: 'absolute', top: 10, right: 12, fontSize: 10,
+                            letterSpacing: '.12em', color: 'var(--gold)', fontFamily: 'var(--fs-head)',
+                            textTransform: 'uppercase',
+                          }}>
+                            #1
+                          </div>
+                        )}
+                        <div style={{ fontSize: 28, marginBottom: 8 }}>{ICONS[g.game] || '🎲'}</div>
+                        <div style={{ fontFamily: 'var(--fs-head)', fontWeight: 700, fontSize: 16, textTransform: 'capitalize', marginBottom: 4 }}>{g.game}</div>
+                        <div style={{ fontFamily: 'var(--fs-display)', fontWeight: 900, fontSize: 28, color: 'var(--gold-l)', marginBottom: 12 }}>
+                          {fmt(g.count)}
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                )
-              })}
+                        <div style={{ fontSize: 10, color: 'var(--cream-faint)', letterSpacing: '.1em', textTransform: 'uppercase', fontFamily: 'var(--fs-head)', marginBottom: 4 }}>rounds played</div>
+                        <div style={{ height: 1, background: 'rgba(217,182,90,.1)', margin: '12px 0' }} />
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                            <span style={{ color: 'var(--cream-faint)' }}>Wagered</span>
+                            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmt(g.total_wagered)}</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                            <span style={{ color: 'var(--cream-faint)' }}>Player wins</span>
+                            <span style={{ color: '#5fd99a', fontVariantNumeric: 'tabular-nums' }}>{fmt(g.total_won)}</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                            <span style={{ color: 'var(--cream-faint)' }}>House edge</span>
+                            <span style={{ color: profit >= 0 ? '#5fd99a' : '#e7708a', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                              {fmtPnl(profit)}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                            <span style={{ color: 'var(--cream-faint)' }}>Player win rate</span>
+                            <span style={{ color: 'var(--cream-dim)', fontVariantNumeric: 'tabular-nums' }}>{winRate}%</span>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
 
-            <div style={panelStyle}>
-              <h2 style={{ fontFamily: 'var(--fs-head)', fontWeight: 700, fontSize: 20, margin: '0 0 20px' }}>
-                <span className="gold-text">Grant Chips</span>
-              </h2>
-              <p style={{ color: 'var(--cream-dim)', fontSize: 14, lineHeight: 1.55, margin: '0 0 20px' }}>
-                Grant or deduct chips from any player. Use negative amounts to deduct.
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <select
-                  value={grantTarget}
-                  onChange={e => setGrantTarget(e.target.value)}
-                  style={{
-                    background: 'rgba(0,0,0,.4)', border: '1px solid rgba(217,182,90,.3)',
-                    borderRadius: 10, padding: '0 16px', color: 'var(--gold-l)',
-                    fontFamily: 'Manrope', fontSize: 14, height: 48, width: '100%',
-                  }}
-                >
-                  <option value="">Select player…</option>
-                  {players.map(p => (
-                    <option key={p.id} value={p.id}>{p.display_name || p.email} — {fmt(p.chips)} chips</option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  placeholder="Amount (e.g. 50000 or -10000)"
-                  value={grantAmount}
-                  onChange={e => setGrantAmount(e.target.value)}
-                  style={{
-                    background: 'rgba(0,0,0,.4)', border: '1px solid rgba(217,182,90,.3)',
-                    borderRadius: 10, padding: '0 16px', color: 'var(--gold-l)',
-                    fontFamily: 'Manrope', fontSize: 14, height: 48, width: '100%',
-                  }}
-                />
-                <div style={{ display: 'flex', gap: 10 }}>
-                  {[10000, 50000, 100000].map(amt => (
-                    <button
-                      key={amt}
-                      className="btn btn-sm btn-ghost"
-                      onClick={() => setGrantAmount(String(amt))}
-                    >{fmt(amt)}</button>
-                  ))}
+            {/* Two-column: top losers + grant chips */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+
+              {/* Top Losers */}
+              <div style={panelStyle}>
+                <h2 style={{ fontFamily: 'var(--fs-head)', fontWeight: 700, fontSize: 20, margin: '0 0 20px' }}>
+                  <span className="gold-text">Top Losses (Players)</span>
+                </h2>
+                <p style={{ color: 'var(--cream-faint)', fontSize: 12, margin: '0 0 16px', lineHeight: 1.5 }}>Players who have lost the most chips overall.</p>
+                {topLosers.length === 0 ? (
+                  <p style={{ color: 'var(--cream-faint)', fontSize: 14 }}>No data yet.</p>
+                ) : topLosers.map((p, i) => {
+                  const lost = (p.total_wagered || 0) - (p.total_won || 0)
+                  const maxLoss = (topLosers[0].total_wagered || 0) - (topLosers[0].total_won || 0)
+                  return (
+                    <div
+                      key={p.id}
+                      onClick={() => setSelectedPlayer(p)}
+                      style={{ padding: '12px 0', borderBottom: i < topLosers.length - 1 ? '1px solid rgba(217,182,90,.08)' : 'none', cursor: 'pointer' }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={{ fontSize: 12, color: 'var(--cream-faint)', fontVariantNumeric: 'tabular-nums', width: 16 }}>#{i + 1}</span>
+                          <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--gold-l)' }}>{p.display_name || 'Unknown'}</span>
+                        </div>
+                        <span style={{ color: '#e7708a', fontWeight: 700, fontSize: 14, fontVariantNumeric: 'tabular-nums' }}>-{fmt(lost)}</span>
+                      </div>
+                      <div style={{ height: 4, borderRadius: 999, background: 'rgba(255,255,255,.05)', overflow: 'hidden', marginLeft: 26 }}>
+                        <div style={{
+                          height: '100%', borderRadius: 999,
+                          background: 'linear-gradient(90deg, #e7708a, #6a1325)',
+                          width: `${(lost / maxLoss) * 100}%`,
+                          transition: 'width .4s',
+                        }} />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Grant Chips */}
+              <div style={panelStyle}>
+                <h2 style={{ fontFamily: 'var(--fs-head)', fontWeight: 700, fontSize: 20, margin: '0 0 20px' }}>
+                  <span className="gold-text">Grant Chips</span>
+                </h2>
+                <p style={{ color: 'var(--cream-dim)', fontSize: 14, lineHeight: 1.55, margin: '0 0 20px' }}>
+                  Grant or deduct chips from any player. Use negative amounts to deduct.
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <select
+                    value={grantTarget}
+                    onChange={e => setGrantTarget(e.target.value)}
+                    style={{
+                      background: 'rgba(0,0,0,.4)', border: '1px solid rgba(217,182,90,.3)',
+                      borderRadius: 10, padding: '0 16px', color: 'var(--gold-l)',
+                      fontFamily: 'Manrope', fontSize: 14, height: 48, width: '100%',
+                    }}
+                  >
+                    <option value="">Select player…</option>
+                    {players.map(p => (
+                      <option key={p.id} value={p.id}>{p.display_name || p.email} — {fmt(p.chips)} chips</option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    placeholder="Amount (e.g. 50000 or -10000)"
+                    value={grantAmount}
+                    onChange={e => setGrantAmount(e.target.value)}
+                    style={{
+                      background: 'rgba(0,0,0,.4)', border: '1px solid rgba(217,182,90,.3)',
+                      borderRadius: 10, padding: '0 16px', color: 'var(--gold-l)',
+                      fontFamily: 'Manrope', fontSize: 14, height: 48, width: '100%',
+                    }}
+                  />
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    {[10000, 50000, 100000].map(amt => (
+                      <button
+                        key={amt}
+                        className="btn btn-sm btn-ghost"
+                        onClick={() => setGrantAmount(String(amt))}
+                      >{fmt(amt)}</button>
+                    ))}
+                  </div>
+                  <button className="btn" onClick={handleGrantChips} style={{ marginTop: 4 }}>
+                    Grant Chips
+                  </button>
                 </div>
-                <button className="btn" onClick={handleGrantChips} style={{ marginTop: 4 }}>
-                  Grant Chips
-                </button>
               </div>
             </div>
           </div>

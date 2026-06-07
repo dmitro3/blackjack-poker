@@ -137,7 +137,8 @@ function LobbyContent() {
       return
     }
     setShowJoin(false)
-    router.push(`/${game}`)
+    const cleanCode = joinCode.replace(/-/g, '').toUpperCase().trim()
+    router.push(`/${game}?join=${cleanCode}`)
   }
 
   async function handleSignOut() {
