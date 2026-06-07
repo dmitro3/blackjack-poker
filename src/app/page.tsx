@@ -6,6 +6,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Suspense } from 'react'
 import { setMuted, isMuted, startLobbyMusic, stopLobbyMusic } from '@/lib/casino-sounds'
+import { decodeCode } from '@/lib/invite-codes'
 
 interface Profile {
   id: string
@@ -54,6 +55,9 @@ function LobbyContent() {
   const [copied, setCopied] = useState(false)
   const [toast, setToast] = useState<{msg:string,kind:string}|null>(null)
   const [muted, setMutedUI] = useState(false)
+  const [showJoin, setShowJoin] = useState(false)
+  const [joinCode, setJoinCode] = useState('')
+  const [joinErr, setJoinErr] = useState('')
   const searchParams = useSearchParams()
   const router = useRouter()
   const supabase = createClient()
@@ -126,6 +130,16 @@ function LobbyContent() {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  function handleJoin() {
+    const game = decodeCode(joinCode)
+    if (!game) {
+      setJoinErr('Invalid code — check with your friend and try again.')
+      return
+    }
+    setShowJoin(false)
+    router.push(`/${game}`)
+  }
+
   async function handleSignOut() {
     await supabase.auth.signOut()
     router.push('/login')
@@ -180,6 +194,7 @@ function LobbyContent() {
           </div>
         </Link>
         <div className="lobby-header-right" style={{display:'flex',alignItems:'center',gap:14}}>
+          <button className="btn btn-sm" onClick={() => { setJoinCode(''); setJoinErr(''); setShowJoin(true) }}>Join Game</button>
           <button
             className="btn btn-sm btn-ghost"
             style={{fontSize:18, padding:'8px 13px', lineHeight:1, minWidth:0}}
@@ -553,6 +568,33 @@ function LobbyContent() {
           .lobby-header-right { gap: 8px !important; flex-wrap: wrap; justify-content: flex-end; }
         }
       `}</style>
+
+      {/* Join Game modal */}
+      {showJoin && (
+        <div style={{position:'fixed',inset:0,background:'rgba(5,4,2,.8)',backdropFilter:'blur(5px)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',animation:'floatUp .2s'}} onClick={() => setShowJoin(false)}>
+          <div className="gilt" style={{width:460,maxWidth:'92vw',padding:36,borderRadius:'var(--radius-lg)',position:'relative'}} onClick={e => e.stopPropagation()}>
+            <button style={{position:'absolute',top:16,right:18,background:'none',border:'none',color:'var(--cream-faint)',fontSize:24,cursor:'pointer',lineHeight:1}} onClick={() => setShowJoin(false)}>×</button>
+            <h2 className="gold-text" style={{fontFamily:'var(--fs-head)',fontWeight:700,fontSize:24,margin:'0 0 8px'}}>Join a Game</h2>
+            <p style={{color:'var(--cream-dim)',fontSize:14,lineHeight:1.55,margin:'0 0 20px'}}>Enter the invite code your friend shared with you to jump straight to their table.</p>
+            <div style={{display:'flex',gap:10}}>
+              <input
+                value={joinCode}
+                onChange={e => { setJoinCode(e.target.value.toUpperCase()); setJoinErr('') }}
+                onKeyDown={e => { if (e.key === 'Enter') handleJoin() }}
+                placeholder="e.g. PKAB-CD12"
+                maxLength={9}
+                style={{flex:1,background:'rgba(0,0,0,.4)',border:`1px solid rgba(217,182,90,${joinErr?'.9':'.3'})`,borderRadius:10,padding:'0 14px',color:'var(--gold-l)',fontSize:18,height:52,fontFamily:'var(--fs-head)',letterSpacing:'.12em',textTransform:'uppercase',outline:'none'}}
+                autoFocus
+              />
+              <button className="btn" style={{padding:'0 24px',height:52,fontSize:15}} onClick={handleJoin}>Go →</button>
+            </div>
+            {joinErr && <div style={{marginTop:10,fontSize:13,color:'#e7708a'}}>{joinErr}</div>}
+            <div style={{marginTop:20,fontSize:12,color:'var(--cream-faint)',lineHeight:1.5,borderTop:'1px solid rgba(217,182,90,.15)',paddingTop:14}}>
+              Codes are 8 characters — ask your friend to hit <strong style={{color:'var(--cream)'}}>Invite</strong> in any game to get one.
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

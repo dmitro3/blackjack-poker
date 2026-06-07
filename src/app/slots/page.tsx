@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { playChip, playWin, playLose, startTension, stopTension, setMuted } from '@/lib/casino-sounds'
+import { generateCode, prettyCode } from '@/lib/invite-codes'
 
 // 🍋×15, 🍒×6, BAR×10, 🔔×10, ♦×5, 7×2 → RTP ~91%, house edge ~9%
 const STRIP = ['🍋','🍒','🍋','BAR','BAR','🍋','🔔','BAR','BAR','🍋','🍒','🍋','🔔','BAR','🍋','BAR','🔔','🍋','🔔','🍋','🔔','BAR','🍋','🍒','♦','🍋','🔔','🔔','BAR','♦','🍋','♦','🔔','🍋','🍒','7','🍋','♦','BAR','🔔','🍋','🍒','BAR','7','🍋','🔔','🍒','♦']
@@ -94,6 +95,8 @@ export default function SlotsPage() {
   const [toast, setToast] = useState<{msg:string,kind:string}|null>(null)
   const [loading, setLoading] = useState(true)
   const [showHelp, setShowHelp] = useState(false)
+  const [showInvite, setShowInvite] = useState(false)
+  const [inviteCode, setInviteCode] = useState('')
   const [autoSpin, setAutoSpin] = useState(false)
   const [reelGap, setReelGap] = useState(350)
   const [muted, setMutedUI] = useState(false)
@@ -183,6 +186,7 @@ export default function SlotsPage() {
         </div>
         <div style={{display:'flex',alignItems:'center',gap:12}}>
           <button className="btn btn-sm btn-ghost" onClick={() => setShowHelp(true)}>How to Play</button>
+          <button className="btn btn-sm btn-ghost" onClick={() => { setInviteCode(generateCode('slots')); setShowInvite(true) }}>Invite</button>
           <button
             className="btn btn-sm btn-ghost"
             style={{fontSize:18, padding:'8px 13px', lineHeight:1, minWidth:0}}
@@ -358,6 +362,22 @@ export default function SlotsPage() {
           .bet-row { gap: 6px !important; flex-wrap: wrap !important; justify-content: center !important; }
         }
       `}</style>
+
+      {/* Invite modal */}
+      {showInvite && (
+        <div style={{position:'fixed',inset:0,background:'rgba(5,4,2,.8)',backdropFilter:'blur(5px)',zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',animation:'floatUp .2s'}} onClick={() => setShowInvite(false)}>
+          <div className="gilt" style={{width:460,maxWidth:'92vw',padding:32,borderRadius:'var(--radius-lg)',position:'relative'}} onClick={e => e.stopPropagation()}>
+            <button style={{position:'absolute',top:16,right:18,background:'none',border:'none',color:'var(--cream-faint)',fontSize:24,cursor:'pointer',lineHeight:1}} onClick={() => setShowInvite(false)}>×</button>
+            <h2 className="gold-text" style={{fontFamily:'var(--fs-head)',fontWeight:700,fontSize:24,margin:'0 0 6px'}}>Invite to the slots</h2>
+            <p style={{color:'var(--cream-dim)',fontSize:14,lineHeight:1.55,margin:'0 0 4px'}}>Share this code with a friend and they&apos;ll join your Slots game.</p>
+            <div style={{textAlign:'center',margin:'18px 0'}}>
+              <div style={{fontFamily:'var(--fs-head)',fontSize:36,fontWeight:800,letterSpacing:'.15em',color:'var(--gold-l)',background:'rgba(0,0,0,.4)',border:'1px solid rgba(217,182,90,.3)',borderRadius:14,padding:'18px 28px',display:'inline-block'}}>{prettyCode(inviteCode)}</div>
+            </div>
+            <button className="btn" style={{width:'100%'}} onClick={() => { navigator.clipboard.writeText(prettyCode(inviteCode)).then(() => setToast({msg:'Code copied!',kind:'win'})) }}>Copy Code</button>
+            <div style={{marginTop:18,fontSize:12,color:'var(--cream-faint)',lineHeight:1.5,borderTop:'1px solid rgba(217,182,90,.15)',paddingTop:14}}>Classic Three Reel · Your chips carry across every HouseTables table.</div>
+          </div>
+        </div>
+      )}
 
       {/* How to Play modal */}
       {showHelp && (

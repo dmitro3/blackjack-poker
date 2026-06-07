@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { playDeal, playWin, playLose, startTension, stopTension, setMuted } from '@/lib/casino-sounds'
+import { generateCode, prettyCode } from '@/lib/invite-codes'
 
 const SUITS = ['♠','♥','♦','♣']
 const RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K']
@@ -82,6 +83,8 @@ export default function BaccaratPage() {
   const [toast, setToast] = useState<{msg:string,kind:string}|null>(null)
   const [loading, setLoading] = useState(true)
   const [showHelp, setShowHelp] = useState(false)
+  const [showInvite, setShowInvite] = useState(false)
+  const [inviteCode, setInviteCode] = useState('')
   const [muted, setMutedUI] = useState(false)
   const deckRef = { current: shuffle(freshDeck()) }
   const router = useRouter()
@@ -233,6 +236,7 @@ export default function BaccaratPage() {
         </div>
         <div className="bac-right" style={{display:'flex',alignItems:'center',gap:12}}>
           <button className="btn btn-sm btn-ghost" onClick={() => setShowHelp(true)}>How to Play</button>
+          <button className="btn btn-sm btn-ghost" onClick={() => { setInviteCode(generateCode('baccarat')); setShowInvite(true) }}>Invite</button>
           <button
             className="btn btn-sm btn-ghost"
             style={{fontSize:18, padding:'8px 13px', lineHeight:1, minWidth:0}}
@@ -364,6 +368,22 @@ export default function BaccaratPage() {
           <span>Tie 8:1</span>
         </div>
       </div>
+
+      {/* Invite modal */}
+      {showInvite && (
+        <div style={{position:'fixed',inset:0,background:'rgba(5,4,2,.8)',backdropFilter:'blur(5px)',zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',animation:'floatUp .2s'}} onClick={() => setShowInvite(false)}>
+          <div className="gilt" style={{width:460,maxWidth:'92vw',padding:32,borderRadius:'var(--radius-lg)',position:'relative'}} onClick={e => e.stopPropagation()}>
+            <button style={{position:'absolute',top:16,right:18,background:'none',border:'none',color:'var(--cream-faint)',fontSize:24,cursor:'pointer',lineHeight:1}} onClick={() => setShowInvite(false)}>×</button>
+            <h2 className="gold-text" style={{fontFamily:'var(--fs-head)',fontWeight:700,fontSize:24,margin:'0 0 6px'}}>Invite to the table</h2>
+            <p style={{color:'var(--cream-dim)',fontSize:14,lineHeight:1.55,margin:'0 0 4px'}}>Share this code with a friend and they&apos;ll join your Baccarat table.</p>
+            <div style={{textAlign:'center',margin:'18px 0'}}>
+              <div style={{fontFamily:'var(--fs-head)',fontSize:36,fontWeight:800,letterSpacing:'.15em',color:'var(--gold-l)',background:'rgba(0,0,0,.4)',border:'1px solid rgba(217,182,90,.3)',borderRadius:14,padding:'18px 28px',display:'inline-block'}}>{prettyCode(inviteCode)}</div>
+            </div>
+            <button className="btn" style={{width:'100%'}} onClick={() => { navigator.clipboard.writeText(prettyCode(inviteCode)).then(() => setToast({msg:'Code copied!',kind:'win'})) }}>Copy Code</button>
+            <div style={{marginTop:18,fontSize:12,color:'var(--cream-faint)',lineHeight:1.5,borderTop:'1px solid rgba(217,182,90,.15)',paddingTop:14}}>Punto Banco · Your chips carry across every HouseTables table.</div>
+          </div>
+        </div>
+      )}
 
       {/* How to Play modal */}
       {showHelp && (

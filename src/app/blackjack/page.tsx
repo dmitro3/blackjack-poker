@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { playDeal, playChip, playWin, playLose, startTension, stopTension, isMuted, setMuted } from '@/lib/casino-sounds'
+import { generateCode, prettyCode } from '@/lib/invite-codes'
 
 const SUITS = [
   { s: '♠', c: 'black' }, { s: '♥', c: 'red' },
@@ -104,7 +105,7 @@ export default function BlackjackPage() {
   const [bal, setBal] = useState(100000)
   const [toast, setToast] = useState<{msg:string,kind:string}|null>(null)
   const [showInvite, setShowInvite] = useState(false)
-  const [inviteUrl, setInviteUrl] = useState('')
+  const [inviteCode, setInviteCode] = useState('')
   const [loading, setLoading] = useState(true)
   const [autoDeal, setAutoDeal] = useState(false)
   const [autoCountdown, setAutoCountdown] = useState(0)
@@ -138,11 +139,10 @@ export default function BlackjackPage() {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
-      const { data: profile } = await supabase.from('profiles').select('chips, invite_code').eq('id', user.id).single()
+      const { data: profile } = await supabase.from('profiles').select('chips').eq('id', user.id).single()
       if (profile) {
         setBal(profile.chips)
         sessionStartBalRef.current = profile.chips
-        setInviteUrl(`${window.location.origin}/?invite=${profile.invite_code}`)
         // Check cooldown
         const cooldownEnd = parseInt(localStorage.getItem('bjCooldownEnd') || '0', 10)
         if (cooldownEnd > Date.now()) {
@@ -500,6 +500,7 @@ export default function BlackjackPage() {
         </div>
         <div className="right">
           <button className="btn btn-sm btn-ghost" onClick={() => setShowHelp(true)}>How to Play</button>
+          <button className="btn btn-sm btn-ghost" onClick={() => { setInviteCode(generateCode('blackjack')); setShowInvite(true) }}>Invite</button>
           <button
             className="btn btn-sm btn-ghost"
             style={{fontSize:18, padding:'8px 13px', lineHeight:1, minWidth:0}}
@@ -659,10 +660,12 @@ export default function BlackjackPage() {
           <div className="modal gilt" onClick={e => e.stopPropagation()}>
             <button className="x" onClick={() => setShowInvite(false)}>×</button>
             <h2 className="gold-text">Invite to your table</h2>
-            <p>Share this link — new players get 5,000 bonus chips when they sign up, and so do you.</p>
+            <p>Share this code with a friend and they&apos;ll join your Blackjack table.</p>
+            <div style={{textAlign:'center',margin:'18px 0'}}>
+              <div style={{fontFamily:'var(--fs-head)',fontSize:36,fontWeight:800,letterSpacing:'.15em',color:'var(--gold-l)',background:'rgba(0,0,0,.4)',border:'1px solid rgba(217,182,90,.3)',borderRadius:14,padding:'18px 28px',display:'inline-block'}}>{prettyCode(inviteCode)}</div>
+            </div>
             <div className="invite-field">
-              <input readOnly value={inviteUrl} />
-              <button className="btn" onClick={() => { navigator.clipboard.writeText(inviteUrl).then(() => showToast('Invite link copied','win')) }}>Copy</button>
+              <button className="btn" style={{flex:1}} onClick={() => { navigator.clipboard.writeText(prettyCode(inviteCode)).then(() => showToast('Code copied!','win')) }}>Copy Code</button>
             </div>
             <div className="seatnote">Dealer stands on 17 · Blackjack pays 3:2. Your chips carry across every HouseTables table.</div>
           </div>

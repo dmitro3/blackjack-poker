@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { playChip, playWin, playLose, startTension, stopTension, setMuted } from '@/lib/casino-sounds'
+import { generateCode, prettyCode } from '@/lib/invite-codes'
 
 const RED = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36])
 const WHEEL = [0,32,15,19,4,21,2,25,17,34,6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9,22,18,29,7,28,12,35,3,26]
@@ -40,7 +41,7 @@ export default function RoulettePage() {
   const [toast, setToast] = useState<{msg:string,kind:string}|null>(null)
   const [showInvite, setShowInvite] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
-  const [inviteUrl, setInviteUrl] = useState('')
+  const [inviteCode, setInviteCode] = useState('')
   const [loading, setLoading] = useState(true)
   const [muted, setMutedUI] = useState(false)
   const wheelRef = useRef<HTMLDivElement>(null)
@@ -57,10 +58,9 @@ export default function RoulettePage() {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
-      const { data: profile } = await supabase.from('profiles').select('chips, invite_code').eq('id', user.id).single()
+      const { data: profile } = await supabase.from('profiles').select('chips').eq('id', user.id).single()
       if (profile) {
         setBal(profile.chips)
-        setInviteUrl(`${window.location.origin}/?invite=${profile.invite_code}`)
       }
       setLoading(false)
     }
@@ -188,7 +188,7 @@ export default function RoulettePage() {
         </div>
         <div className="right">
           <button className="btn btn-sm btn-ghost" onClick={() => setShowHelp(true)}>How to Play</button>
-          <button className="btn btn-sm btn-ghost" onClick={() => setShowInvite(true)}>Invite</button>
+          <button className="btn btn-sm btn-ghost" onClick={() => { setInviteCode(generateCode('roulette')); setShowInvite(true) }}>Invite</button>
           <button
             className="btn btn-sm btn-ghost"
             style={{fontSize:18, padding:'8px 13px', lineHeight:1, minWidth:0}}
@@ -294,10 +294,12 @@ export default function RoulettePage() {
           <div className="modal gilt" onClick={e => e.stopPropagation()}>
             <button className="x" onClick={() => setShowInvite(false)}>×</button>
             <h2 className="gold-text">Invite to the wheel</h2>
-            <p>Share this link and friends join the table. They&apos;ll get 5,000 bonus chips for signing up.</p>
+            <p>Share this code with a friend and they&apos;ll join your Roulette table.</p>
+            <div style={{textAlign:'center',margin:'18px 0'}}>
+              <div style={{fontFamily:'var(--fs-head)',fontSize:36,fontWeight:800,letterSpacing:'.15em',color:'var(--gold-l)',background:'rgba(0,0,0,.4)',border:'1px solid rgba(217,182,90,.3)',borderRadius:14,padding:'18px 28px',display:'inline-block'}}>{prettyCode(inviteCode)}</div>
+            </div>
             <div className="invite-field">
-              <input readOnly value={inviteUrl} />
-              <button className="btn" onClick={() => { navigator.clipboard.writeText(inviteUrl).then(() => showToast('Invite link copied','win')) }}>Copy</button>
+              <button className="btn" style={{flex:1}} onClick={() => { navigator.clipboard.writeText(prettyCode(inviteCode)).then(() => showToast('Code copied!','win')) }}>Copy Code</button>
             </div>
             <div className="seatnote">European single-zero · Your chips carry across every HouseTables table.</div>
           </div>

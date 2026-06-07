@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { PokerGame, BB, fmt, fmtShort, GameSnapshot, LegalActions } from '@/lib/poker-game'
 import type { Card } from '@/lib/poker-engine'
 import { playDeal, playChip, playWin, playLose, startTension, stopTension, isMuted, setMuted } from '@/lib/casino-sounds'
+import { generateCode, prettyCode } from '@/lib/invite-codes'
 
 const SEATS = [
   { name:'You', avatar:'V' },
@@ -105,7 +106,7 @@ export default function PokerPage() {
   useEffect(() => {
     try { setMutedUI(isMuted()) } catch { /* ignore */ }
   }, [])
-  const [inviteUrl, setInviteUrl] = useState('')
+  const [inviteCode, setInviteCode] = useState('')
   const [loading, setLoading] = useState(true)
   const autoNext = useRef<ReturnType<typeof setTimeout> | null>(null)
   const router = useRouter()
@@ -120,11 +121,10 @@ export default function PokerPage() {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
-      const { data: profile } = await supabase.from('profiles').select('chips, invite_code').eq('id', user.id).single()
+      const { data: profile } = await supabase.from('profiles').select('chips').eq('id', user.id).single()
       if (profile) {
         setBal(profile.chips)
         sessionStartRef.current = profile.chips
-        setInviteUrl(`${window.location.origin}/?invite=${profile.invite_code}`)
         const game = new PokerGame(SEATS, profile.chips)
         game.onBankChange = (chips: number) => setBal(chips)
         gameRef.current = game
@@ -266,7 +266,7 @@ export default function PokerPage() {
         </div>
         <div className="right">
           <button className="btn btn-sm btn-ghost desk-only" onClick={() => setShowHelp(true)}>How to Play</button>
-          <button className="btn btn-sm btn-ghost desk-only" onClick={() => setShowInvite(true)}>Invite</button>
+          <button className="btn btn-sm btn-ghost desk-only" onClick={() => { setInviteCode(generateCode('poker')); setShowInvite(true) }}>Invite</button>
           <button
             className="btn btn-sm btn-ghost"
             style={{padding:'9px 13px',fontSize:16}}
@@ -462,10 +462,12 @@ export default function PokerPage() {
           <div className="modal gilt" onClick={e => e.stopPropagation()}>
             <button className="x" onClick={() => setShowInvite(false)}>×</button>
             <h2 className="gold-text">Invite to your table</h2>
-            <p>Share this link and friends drop into an open seat. They&apos;ll get 5,000 bonus chips.</p>
+            <p>Share this code with a friend and they&apos;ll join your Poker table.</p>
+            <div style={{textAlign:'center',margin:'18px 0'}}>
+              <div style={{fontFamily:'var(--fs-head)',fontSize:36,fontWeight:800,letterSpacing:'.15em',color:'var(--gold-l)',background:'rgba(0,0,0,.4)',border:'1px solid rgba(217,182,90,.3)',borderRadius:14,padding:'18px 28px',display:'inline-block'}}>{prettyCode(inviteCode)}</div>
+            </div>
             <div className="invite-field">
-              <input readOnly value={inviteUrl} />
-              <button className="btn" onClick={() => { navigator.clipboard.writeText(inviteUrl).then(() => showToast('Invite link copied','win')) }}>Copy</button>
+              <button className="btn" style={{flex:1}} onClick={() => { navigator.clipboard.writeText(prettyCode(inviteCode)).then(() => showToast('Code copied!','win')) }}>Copy Code</button>
             </div>
             <div className="seatnote">Blinds 500 / 1,000 · No-limit · 6 seats. Your chips carry across every HouseTables table.</div>
           </div>
