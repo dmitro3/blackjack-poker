@@ -343,10 +343,17 @@ export default function PokerPage() {
             {legal.canRaise && (
               <div className="raise-box">
                 <div className="raise-top">
-                  <input type="range" min={legal.minRaiseTo} max={legal.maxRaiseTo} step={BB}
-                    value={safeRaise}
-                    onChange={e => setRaiseTo(parseInt(e.target.value, 10))} />
-                  <span className="raise-amt">{fmt(safeRaise)}</span>
+                  <input
+                    type="number"
+                    min={legal.minRaiseTo}
+                    max={legal.maxRaiseTo}
+                    step={BB}
+                    value={raiseTo || ''}
+                    placeholder={fmt(legal.minRaiseTo)}
+                    onChange={e => setRaiseTo(parseInt(e.target.value, 10) || 0)}
+                    onBlur={() => setRaiseTo(safeRaise)}
+                    onKeyDown={e => { if (e.key === 'Enter') act(safeRaise >= legal.maxRaiseTo ? 'allin' : 'raise', safeRaise) }}
+                  />
                 </div>
                 <div className="quick">
                   <button onClick={() => setRaiseTo(Math.min(legal.maxRaiseTo, Math.max(legal.minRaiseTo, Math.round((legal.pot*0.5)/BB)*BB + legal.toCall)))}>½ Pot</button>
@@ -484,9 +491,10 @@ export default function PokerPage() {
         .actions { display:flex;gap:12px;align-items:center; }
         .actions .btn { min-width:122px; }
         .raise-box { display:flex;flex-direction:column;gap:9px;align-items:stretch;width:300px; }
-        .raise-top { display:flex;align-items:center;gap:12px; }
-        .raise-top input[type=range] { flex:1;accent-color:var(--gold);height:5px; }
-        .raise-amt { font-family:var(--fs-head);font-weight:800;color:var(--gold-l);min-width:84px;text-align:right;font-variant-numeric:tabular-nums;font-size:16px; }
+        .raise-top { display:flex;align-items:center; }
+        .raise-top input[type=number] { flex:1;background:rgba(0,0,0,.45);border:1.5px solid rgba(217,182,90,.4);border-radius:10px;padding:8px 14px;color:var(--gold-l);font-family:var(--fs-head);font-weight:800;font-size:18px;font-variant-numeric:tabular-nums;text-align:center;outline:none;width:100%; }
+        .raise-top input[type=number]:focus { border-color:var(--gold);box-shadow:0 0 0 2px rgba(217,182,90,.2); }
+        .raise-top input[type=number]::-webkit-inner-spin-button,.raise-top input[type=number]::-webkit-outer-spin-button { -webkit-appearance:none; }
         .quick { display:flex;gap:7px; }
         .quick button { flex:1;font-family:var(--fs-head);font-size:11px;letter-spacing:.05em;text-transform:uppercase;padding:7px 0;border-radius:8px;background:rgba(217,182,90,.1);border:1px solid rgba(217,182,90,.3);color:var(--gold-l);cursor:pointer;transition:.15s; }
         .quick button:hover { background:rgba(217,182,90,.22); }
