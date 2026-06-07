@@ -749,7 +749,7 @@ export default function PokerPage() {
 
       <style>{`
         html, body { height: 100%; overflow: hidden; }
-        .table-wrap { height: 100vh; display: flex; flex-direction: column; }
+        .table-wrap { height: 100vh; height: 100svh; display: flex; flex-direction: column; }
         .topbar { display:flex;align-items:center;justify-content:space-between;padding:14px 24px;z-index:30;background:linear-gradient(180deg, rgba(11,10,7,.95), rgba(11,10,7,.2)); }
         .back { display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--cream-dim);font-family:var(--fs-head);font-size:13px;letter-spacing:.12em;text-transform:uppercase;padding:9px 16px;border-radius:999px;border:1px solid rgba(217,182,90,.25);transition:.2s; }
         .back:hover { color:var(--gold-l);border-color:var(--gold); }
@@ -816,6 +816,31 @@ export default function PokerPage() {
         .modal .x:hover { color:var(--gold-l); }
         .seatnote { margin-top:18px;font-size:12px;color:var(--cream-faint);line-height:1.5;border-top:1px solid rgba(217,182,90,.15);padding-top:14px; }
         .mob-only { display: none; }
+        @media (min-width: 641px) and (max-width: 1200px) {
+          .topbar { padding: 9px 16px !important; }
+          .title-c .s { display: none !important; }
+          .felt-stage { margin: 6px 14px 4px !important; overflow: visible !important; }
+          .dealer-plaque { transform: translate(-50%, calc(-50% - 86px)) !important; }
+          .dealer-plaque .croupier { width: 42px !important; height: 42px !important; font-size: 19px !important; }
+          .center-area { transform: translate(-50%, calc(-50% + 12px)) !important; gap: 8px !important; }
+          .board { min-height: 72px !important; gap: 5px !important; }
+          .board .card { --w: 52px !important; }
+          .board .slot { width: 52px !important; height: 73px !important; }
+          .seat { width: 154px !important; }
+          .seat .pod { padding: 5px 9px !important; gap: 7px !important; }
+          .seat .av { width: 32px !important; height: 32px !important; font-size: 13px !important; }
+          .seat .nm { font-size: 11px !important; }
+          .seat .st { font-size: 11px !important; }
+          .holes .card { --w: 32px !important; }
+          .seat.you .holes .card { --w: 36px !important; }
+          .holes { margin-bottom: 5px !important; }
+          .control-bar { padding: 7px 16px 9px !important; min-height: 72px !important; gap: 12px !important; }
+          .actions .btn { min-width: 100px !important; font-size: 13px !important; }
+          .raise-box { width: 244px !important; gap: 5px !important; }
+          .raise-top input[type=number] { font-size: 15px !important; padding: 5px 10px !important; }
+          .quick button { padding: 5px 0 !important; font-size: 10px !important; }
+          .result-banner { font-size: 18px !important; padding: 8px 20px !important; transform: translate(-50%, calc(-50% - 72px)) !important; }
+        }
         @media (max-width: 640px) {
           .desk-only { display: none !important; }
           .mob-only { display: flex !important; }
