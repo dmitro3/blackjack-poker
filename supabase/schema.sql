@@ -39,6 +39,26 @@ create table public.invite_rewards (
   granted_at timestamptz default now()
 );
 
+-- game_rooms table (tracks active multiplayer sessions for admin spectating)
+create table public.game_rooms (
+  code text primary key,
+  game text not null,
+  host_id uuid references public.profiles(id),
+  host_name text,
+  guest_name text,
+  status text default 'waiting',
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+alter table public.game_rooms enable row level security;
+
+create policy "Hosts can manage own rooms" on public.game_rooms
+  for all using (auth.uid() = host_id);
+
+create policy "Service role can do everything on rooms" on public.game_rooms
+  for all using (auth.role() = 'service_role');
+
 -- admin_settings table
 create table public.admin_settings (
   key text primary key,

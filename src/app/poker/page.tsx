@@ -43,17 +43,18 @@ function CardComp({ card, faceDown, idx = 0, cls = '' }: {
   )
 }
 
-function SeatComp({ p, pos, snap, isButton, isHero }: {
+function SeatComp({ p, pos, snap, isButton, isHero, revealAll }: {
   p: PokerGame['players'][0]
   pos: typeof POS[0]
   snap: GameSnapshot
   isButton: boolean
   isHero: boolean
+  revealAll?: boolean
 }) {
   const active = snap.toAct === p.id && snap.street !== 'handover' && snap.street !== 'idle' && snap.street !== 'showdown'
   const isWinner = snap.lastResult && snap.lastResult.winners.indexOf(p.id) >= 0 && snap.street === 'handover'
   const showCards = snap.lastResult && snap.lastResult.showdown && !p.folded
-  const reveal = isHero || !!showCards
+  const reveal = isHero || !!showCards || !!revealAll
   const handName = snap.lastResult?.showdown && snap.lastResult.hands[p.id] && !p.folded
     ? snap.lastResult.hands[p.id].name : null
   const cls = 'seat' + (isHero ? ' you' : '') + (!isHero && p.isBot ? ' bot' : '') +
@@ -124,12 +125,13 @@ export default function PokerPage() {
   const sessionStartRef = useRef(100000)
 
   // ── Multiplayer ────────────────────────────────────────────────────────────
-  // modeRef: 'solo' = normal single player, 'host' = invited a friend, 'guest' = joined a friend
-  const modeRef = useRef<'solo' | 'host' | 'guest'>('solo')
+  // modeRef: 'solo' = normal single player, 'host' = invited a friend, 'guest' = joined a friend, 'spectator' = watching
+  const modeRef = useRef<'solo' | 'host' | 'guest' | 'spectator'>('solo')
   const guestSeatRef = useRef<number | null>(null)      // host: which seat belongs to guest
   const myGuestSeatRef = useRef<number | null>(null)    // guest: which seat is mine
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const joinCodeRef = useRef<string | null>(null)
+  const inviteCodeRef = useRef<string>('')              // host: current invite code, for cleanup
 
   const [myGuestSeat, setMyGuestSeat] = useState<number | null>(null)
   const [guestConnected, setGuestConnected] = useState(false)
@@ -155,13 +157,16 @@ export default function PokerPage() {
         sessionStartRef.current = profile.chips
         if (profile.display_name) setMyDisplayName(profile.display_name)
 
-        // Check URL for join code
+        // Check URL for join/spectate code
         const params = new URLSearchParams(window.location.search)
         const jc = params.get('join')
+        const sc = params.get('spectate')
         if (jc) {
-          // Guest mode — don't create local game
           joinCodeRef.current = jc.toUpperCase()
           modeRef.current = 'guest'
+        } else if (sc) {
+          joinCodeRef.current = sc.toUpperCase()
+          modeRef.current = 'spectator'
         } else {
           // Host/solo mode — create local game
           const game = new PokerGame(SEATS, profile.chips)
@@ -216,6 +221,45 @@ export default function PokerPage() {
     return () => { channel.unsubscribe() }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading])
+
+  // ── Spectator: subscribe silently, request current state ──────────────────
+  useEffect(() => {
+    if (loading || modeRef.current !== 'spectator' || !joinCodeRef.current) return
+    const jc = joinCodeRef.current
+
+    const channel = supabase.channel(`ht-game-${jc}`, {
+      config: { broadcast: { self: false } },
+    })
+
+    channel
+      .on('broadcast', { event: 'STATE' }, ({ payload }) => {
+        const { snap: s } = payload as { snap: GameSnapshot; legal: LegalActions | null; guestSeat: number | null }
+        setHostSnap(s)
+      })
+      .subscribe(status => {
+        if (status === 'SUBSCRIBED') {
+          channel.send({ type: 'broadcast', event: 'SPECTATOR_JOIN', payload: {} })
+        }
+      })
+
+    channelRef.current = channel
+    return () => { channel.unsubscribe() }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading])
+
+  // ── Cleanup room on unmount (host only) ────────────────────────────────────
+  useEffect(() => {
+    return () => {
+      const code = inviteCodeRef.current
+      if (code && (modeRef.current === 'host' || modeRef.current === 'solo')) {
+        fetch('/api/game/room', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code, status: 'ended' }),
+        }).catch(() => {})
+      }
+    }
+  }, [])
 
   // ── sync: update local snap + broadcast to guest (host only) ──────────────
   const sync = useCallback(() => {
@@ -306,10 +350,30 @@ export default function PokerPage() {
     if (modeRef.current !== 'solo') return   // already in a multiplayer game
     modeRef.current = 'host'
     setWaitingForGuest(true)
+    inviteCodeRef.current = code
+
+    // Register room in DB so admin can discover it
+    fetch('/api/game/room', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, game: 'poker', status: 'waiting' }),
+    }).catch(() => {})
 
     const channel = supabase.channel(`ht-game-${code}`, {
       config: { broadcast: { self: false } },
     })
+
+    const broadcastState = () => {
+      const g = gameRef.current
+      if (!g) return
+      const gs = guestSeatRef.current
+      const legal = gs !== null && g.toAct === gs ? g.legal() : null
+      channel.send({
+        type: 'broadcast',
+        event: 'STATE',
+        payload: JSON.parse(JSON.stringify({ snap: g.snapshot(), legal, guestSeat: gs })),
+      }).catch(() => {})
+    }
 
     channel
       .on('broadcast', { event: 'GUEST_JOIN' }, ({ payload }) => {
@@ -325,15 +389,19 @@ export default function PokerPage() {
         setWaitingForGuest(false)
         showToast(`${guestName} joined the table!`, 'win')
 
-        // Send full state to new guest immediately
-        const gs = guestSeatRef.current
-        const legal = g.toAct === gs ? g.legal() : null
-        channel.send({
-          type: 'broadcast',
-          event: 'STATE',
-          payload: JSON.parse(JSON.stringify({ snap: g.snapshot(), legal, guestSeat: gs })),
+        // Mark room active in DB
+        fetch('/api/game/room', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code, status: 'active', guestName }),
         }).catch(() => {})
+
+        broadcastState()
         sync()
+      })
+      .on('broadcast', { event: 'SPECTATOR_JOIN' }, () => {
+        // Send current state to new spectator without changing game
+        broadcastState()
       })
       .on('broadcast', { event: 'ACTION' }, ({ payload }) => {
         const g = gameRef.current
@@ -403,6 +471,7 @@ export default function PokerPage() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   const isGuestMode = modeRef.current === 'guest'
+  const isSpectatorMode = modeRef.current === 'spectator'
 
   if (loading) return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -410,31 +479,35 @@ export default function PokerPage() {
     </div>
   )
 
-  if (isGuestMode && !hostSnap) return (
+  if ((isGuestMode || isSpectatorMode) && !hostSnap) return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'radial-gradient(120% 80% at 50% -10%, #241f15 0%, #13110b 45%, #0b0a07 100%)' }}>
-      <div style={{ fontFamily: 'var(--fs-head)', fontSize: 22, letterSpacing: '.1em', color: 'var(--gold-l)', marginBottom: 12 }}>Joining table…</div>
+      <div style={{ fontFamily: 'var(--fs-head)', fontSize: 22, letterSpacing: '.1em', color: 'var(--gold-l)', marginBottom: 12 }}>
+        {isSpectatorMode ? 'Connecting to game…' : 'Joining table…'}
+      </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'var(--fs-head)', fontSize: 13, color: 'var(--cream-faint)', letterSpacing: '.08em' }}>
         <span style={{ width: 14, height: 14, border: '2px solid rgba(217,182,90,.3)', borderTopColor: 'var(--gold)', borderRadius: '50%', display: 'inline-block', animation: 'spin360 .8s linear infinite' }} />
-        Waiting for host to share game state…
+        {isSpectatorMode ? 'Waiting for game state…' : 'Waiting for host to share game state…'}
       </div>
       <style>{`@keyframes spin360 { to { transform: rotate(360deg) } }`}</style>
     </div>
   )
 
-  if (!isGuestMode && (!snap || !gameRef.current)) return (
+  if (!isGuestMode && !isSpectatorMode && (!snap || !gameRef.current)) return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ color: 'var(--gold-l)', fontFamily: 'var(--fs-head)', letterSpacing: '.1em' }}>Loading…</div>
     </div>
   )
 
-  // Unified display — guest uses host's snapshot, host uses local snapshot
-  const displaySnap = isGuestMode ? hostSnap! : snap!
+  // Unified display — guest/spectator use host's snapshot, host uses local snapshot
+  const displaySnap = (isGuestMode || isSpectatorMode) ? hostSnap! : snap!
   const displayPlayers = displaySnap.players
-  const heroSeat = isGuestMode ? (myGuestSeat ?? 0) : 0
-  const heroPlayer = displayPlayers[heroSeat]
+  // Spectators have no hero seat (-1 matches nothing)
+  const heroSeat = isGuestMode ? (myGuestSeat ?? 0) : isSpectatorMode ? -1 : 0
+  const heroPlayer = heroSeat >= 0 ? displayPlayers[heroSeat] : null
   const game = gameRef.current
 
-  const heroToAct = displaySnap.toAct === heroSeat &&
+  const heroToAct = !isSpectatorMode && heroSeat >= 0 &&
+    displaySnap.toAct === heroSeat &&
     heroPlayer && !heroPlayer.folded &&
     (displaySnap.street === 'preflop' || displaySnap.street === 'flop' ||
      displaySnap.street === 'turn' || displaySnap.street === 'river')
@@ -462,6 +535,7 @@ export default function PokerPage() {
             NO-LIMIT · BLINDS 500/1,000
             {guestConnected && <span style={{ color: '#3ad07a', marginLeft: 8 }}>● LIVE</span>}
             {isGuestMode && <span style={{ color: '#3ad07a', marginLeft: 8 }}>● LIVE</span>}
+            {isSpectatorMode && <span style={{ color: '#d9b65a', marginLeft: 8 }}>👁 SPECTATING</span>}
           </div>
         </div>
         <div className="right">
@@ -518,7 +592,7 @@ export default function PokerPage() {
         </div>
         {showResult && <div className="result-banner">{displaySnap.message}</div>}
         {displayPlayers.map((p, i) => (
-          <SeatComp key={i} p={p} pos={POS[i]} snap={displaySnap} isButton={i === buttonSeat} isHero={i === heroSeat} />
+          <SeatComp key={i} p={p} pos={POS[i]} snap={displaySnap} isButton={i === buttonSeat} isHero={i === heroSeat} revealAll={isSpectatorMode} />
         ))}
       </div>
 
@@ -597,7 +671,18 @@ export default function PokerPage() {
 
       {/* ── Control bar ── */}
       <div className="control-bar">
-        {!isGuestMode && displaySnap.street === 'idle' && (
+        {isSpectatorMode && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 18 }}>👁</span>
+            <div>
+              <div style={{ fontFamily: 'var(--fs-head)', fontSize: 13, letterSpacing: '.12em', color: 'var(--gold-l)', textTransform: 'uppercase' }}>Spectating</div>
+              <div style={{ fontSize: 11, color: 'var(--cream-faint)', marginTop: 2 }}>
+                {displaySnap.street === 'idle' ? 'Waiting for next hand…' : (displayPlayers[displaySnap.toAct]?.name ?? '') + ' is deciding…'}
+              </div>
+            </div>
+          </div>
+        )}
+        {!isGuestMode && !isSpectatorMode && displaySnap.street === 'idle' && (
           <div className="actions" style={{ flexDirection: 'column' }}>
             <div className="waitmsg" style={{ marginBottom: 6 }}>{displaySnap.message || 'Table paused'}</div>
             <button className="btn" onClick={async () => {
@@ -657,14 +742,14 @@ export default function PokerPage() {
           </>
         )}
 
-        {!heroToAct && displaySnap.street !== 'idle' && !showResult && (
+        {!heroToAct && !isSpectatorMode && displaySnap.street !== 'idle' && !showResult && (
           <div className="waitmsg">
             <span className="spin" />
             {dealing ? 'Dealing…' : (displayPlayers[displaySnap.toAct]?.name + ' is deciding…')}
           </div>
         )}
 
-        {showResult && (
+        {showResult && !isSpectatorMode && (
           <div className="actions" style={{ flexDirection: 'column' }}>
             <div className="waitmsg" style={{ marginBottom: 4 }}>{displaySnap.message}</div>
             {!isGuestMode
