@@ -188,8 +188,8 @@ export default function RoulettePage() {
           <div className="s">EUROPEAN · SINGLE ZERO</div>
         </div>
         <div className="right">
-          <button className="btn btn-sm btn-ghost" onClick={() => setShowHelp(true)}>How to Play</button>
-          <button className="btn btn-sm btn-ghost" onClick={() => { setInviteCode(generateCode('roulette')); setShowInvite(true) }}>Invite</button>
+          <button className="btn btn-sm btn-ghost rlt-desk" onClick={() => setShowHelp(true)}>How to Play</button>
+          <button className="btn btn-sm btn-ghost rlt-desk" onClick={() => { setInviteCode(generateCode('roulette')); setShowInvite(true) }}>Invite</button>
           <button
             className="btn btn-sm btn-ghost"
             style={{fontSize:18, padding:'8px 13px', lineHeight:1, minWidth:0}}
@@ -351,9 +351,10 @@ export default function RoulettePage() {
         .topbar .right { display:flex;align-items:center;gap:12px; }
         .stage { flex:1;display:grid;grid-template-columns:320px 1fr;gap:22px;padding:22px 22px 0;min-height:0;margin:0 18px 18px;border-radius:30px;border:1px solid rgba(217,182,90,.3);background:radial-gradient(120% 100% at 50% 0%,#137a4a 0%,#0c5a37 38%,#073b25 100%);box-shadow:inset 0 0 140px rgba(0,0,0,.45),inset 0 2px 0 rgba(255,255,255,.05); }
         .wheel-side { display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px; }
-        .wheel-housing { position:relative;width:330px;height:330px; }
+        .wheel-housing { position:relative;width:330px;height:330px;cursor:pointer; }
+        .wheel-housing > * { pointer-events:none; }
         .pointer { position:absolute;top:-6px;left:50%;transform:translateX(-50%);z-index:8;width:0;height:0;border-left:13px solid transparent;border-right:13px solid transparent;border-top:22px solid var(--gold-l);filter:drop-shadow(0 3px 4px rgba(0,0,0,.6)); }
-        .wheel-rim { position:absolute;inset:0;border-radius:50%;background:transparent;pointer-events:none;z-index:5;box-shadow:0 20px 50px rgba(0,0,0,.6), inset 0 0 0 8px var(--gold-d), inset 0 0 0 16px #1a130a; }
+        .wheel-rim { position:absolute;inset:0;border-radius:50%;background:transparent;z-index:5;box-shadow:0 20px 50px rgba(0,0,0,.6), inset 0 0 0 8px var(--gold-d), inset 0 0 0 16px #1a130a; }
         .wheel { position:absolute;inset:13px;border-radius:50%;overflow:hidden;transition:transform 5.4s cubic-bezier(.16,.84,.28,1);will-change:transform; }
         .pocket { position:absolute;top:0;left:50%;width:28px;height:50%;transform-origin:bottom center;margin-left:-14px;display:flex;justify-content:center;pointer-events:none; }
         .pocket .num { color:#fff;font-family:var(--fs-head);font-weight:800;font-size:11px;width:100%;text-align:center;padding-top:7px;line-height:1;text-shadow:0 1px 3px rgba(0,0,0,.95),0 0 6px rgba(0,0,0,.8); }
@@ -399,136 +400,89 @@ export default function RoulettePage() {
         .modal .x { position:absolute;top:16px;right:18px;background:none;border:none;color:var(--cream-faint);font-size:24px;cursor:pointer;line-height:1; }
         .seatnote { margin-top:18px;font-size:12px;color:var(--cream-faint);line-height:1.5;border-top:1px solid rgba(217,182,90,.15);padding-top:14px; }
         @keyframes tapPulse {
-          0%,100% { transform: translate(-50%,-50%) scale(1); opacity: .75; }
-          50% { transform: translate(-50%,-50%) scale(1.2); opacity: 1; }
+          0%,100% { transform:translate(-50%,-50%) scale(1); opacity:.7; }
+          50% { transform:translate(-50%,-50%) scale(1.22); opacity:1; }
         }
-        @media (max-width: 640px) {
-          html, body { overflow: hidden !important; }
-          .table-wrap { height: 100svh !important; overflow: hidden !important; }
+        @media (max-width:640px) {
+          html,body { overflow:hidden !important; }
+          .table-wrap { height:100svh !important; overflow:hidden !important; display:flex !important; flex-direction:column !important; }
+          .rlt-desk { display:none !important; }
+          .topbar { padding:8px 12px !important; flex-shrink:0; }
+          .topbar .title-c .t { font-size:15px !important; }
+          .topbar .title-c .s { display:none !important; }
+          .topbar .right { gap:8px !important; }
 
-          .topbar { padding: 8px 12px !important; }
-          .topbar .title-c .t { font-size: 15px !important; }
-          .topbar .title-c .s { display: none !important; }
-          .topbar .right > .btn:nth-child(1),
-          .topbar .right > .btn:nth-child(2) { display: none !important; }
-
+          /* Stage: vertical flex, fills remaining height */
           .stage {
-            display: flex !important;
-            flex-direction: column !important;
-            grid-template-columns: unset !important;
-            gap: 0 !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            border-radius: 0 !important;
-            border-left: none !important;
-            border-right: none !important;
-            border-bottom: none !important;
-            overflow: hidden !important;
-            min-height: 0 !important;
+            flex:1 !important;
+            display:flex !important;
+            flex-direction:column !important;
+            gap:0 !important;
+            padding:0 !important;
+            margin:0 !important;
+            border-radius:0 !important;
+            border-left:none !important;
+            border-right:none !important;
+            border-bottom:none !important;
+            min-height:0 !important;
+            overflow:hidden !important;
           }
 
+          /* Wheel row: compact, horizontal */
           .wheel-side {
-            flex-direction: row !important;
-            align-items: center !important;
-            justify-content: flex-start !important;
-            gap: 14px !important;
-            padding: 10px 14px !important;
-            flex-shrink: 0 !important;
-            border-bottom: 1px solid rgba(217,182,90,.18) !important;
+            flex-shrink:0 !important;
+            flex-direction:row !important;
+            align-items:center !important;
+            justify-content:flex-start !important;
+            gap:14px !important;
+            padding:10px 14px !important;
+            border-bottom:1px solid rgba(217,182,90,.18) !important;
           }
-
-          .wheel-housing {
-            width: 148px !important;
-            height: 148px !important;
-            flex-shrink: 0 !important;
-            cursor: pointer !important;
-          }
-          .wheel { inset: 7px !important; }
-          .pointer {
-            border-left-width: 8px !important;
-            border-right-width: 8px !important;
-            border-top-width: 14px !important;
-            top: -4px !important;
-          }
-          .wheel-rim {
-            box-shadow: 0 8px 20px rgba(0,0,0,.6),
-              inset 0 0 0 5px var(--gold-d),
-              inset 0 0 0 10px #1a130a !important;
-          }
-          .pocket { width: 10px !important; margin-left: -5px !important; }
-          .pocket .num { font-size: 5px !important; padding-top: 3px !important; }
-
+          .wheel-housing { width:150px !important; height:150px !important; flex-shrink:0 !important; }
+          .wheel { inset:8px !important; }
+          .pointer { border-left-width:8px !important; border-right-width:8px !important; border-top-width:14px !important; top:-4px !important; }
+          .wheel-rim { box-shadow:0 8px 20px rgba(0,0,0,.6),inset 0 0 0 5px var(--gold-d),inset 0 0 0 10px #1a130a !important; }
+          .pocket { width:10px !important; margin-left:-5px !important; }
+          .pocket .num { font-size:5px !important; padding-top:3px !important; }
           .tap-spin-hint {
-            display: flex !important;
-            position: absolute !important;
-            top: 50% !important; left: 50% !important;
-            transform: translate(-50%,-50%) !important;
-            width: 32% !important;
-            aspect-ratio: 1 !important;
-            border-radius: 50% !important;
-            z-index: 10 !important;
-            background: rgba(217,182,90,.35) !important;
-            align-items: center !important;
-            justify-content: center !important;
-            font-family: var(--fs-head) !important;
-            font-size: 9px !important;
-            font-weight: 800 !important;
-            letter-spacing: .1em !important;
-            color: #fff !important;
-            pointer-events: none !important;
-            animation: tapPulse 1.5s ease-in-out infinite !important;
+            display:flex !important; position:absolute !important;
+            top:50% !important; left:50% !important;
+            transform:translate(-50%,-50%) !important;
+            width:32% !important; aspect-ratio:1 !important;
+            border-radius:50% !important; z-index:10 !important;
+            background:rgba(217,182,90,.38) !important;
+            align-items:center !important; justify-content:center !important;
+            font-family:var(--fs-head) !important; font-size:9px !important;
+            font-weight:800 !important; letter-spacing:.1em !important;
+            color:#fff !important; pointer-events:none !important;
+            animation:tapPulse 1.5s ease-in-out infinite !important;
           }
+          .result-disp { flex:1 !important; min-height:unset !important; align-items:flex-start !important; justify-content:center !important; gap:6px !important; }
+          .result-num { width:50px !important; height:50px !important; font-size:22px !important; }
+          .result-net { font-size:13px !important; }
 
-          .result-disp {
-            flex: 1 !important;
-            min-height: unset !important;
-            align-items: flex-start !important;
-            justify-content: center !important;
-            gap: 6px !important;
-          }
-          .result-num { width: 50px !important; height: 50px !important; font-size: 22px !important; }
-          .result-net { font-size: 13px !important; }
+          /* Board: fills remaining space, scrollable */
+          .board-side { flex:1 !important; min-height:0 !important; overflow-y:auto !important; padding:6px 8px 0 !important; border-radius:0 !important; border:none !important; background:transparent !important; backdrop-filter:none !important; gap:0 !important; }
+          .board-scroll { overflow-x:hidden !important; }
+          .board { min-width:unset !important; width:100% !important; }
+          .zero { width:22px !important; font-size:10px !important; }
+          .numbers { grid-template-columns:repeat(12,1fr) !important; grid-template-rows:repeat(3,32px) !important; }
+          .numbers .cell { font-size:9px !important; }
+          .colbets { width:26px !important; }
+          .colbets .cell { font-size:7px !important; }
+          .lower { margin-left:22px !important; margin-right:26px !important; }
+          .lower .cell { height:26px !important; font-size:8px !important; letter-spacing:0 !important; }
+          .placed { width:22px !important; height:22px !important; font-size:8px !important; }
 
-          .board-side {
-            flex: 1 !important;
-            min-height: 0 !important;
-            overflow-y: auto !important;
-            padding: 8px 8px 0 !important;
-            border-radius: 0 !important;
-            border: none !important;
-            background: transparent !important;
-            backdrop-filter: none !important;
-            gap: 0 !important;
-          }
-          .board-scroll { overflow-x: hidden !important; padding-bottom: 4px !important; }
-          .board { min-width: unset !important; width: 100% !important; }
-          .zero { width: 22px !important; font-size: 10px !important; }
-          .numbers {
-            grid-template-columns: repeat(12, 1fr) !important;
-            grid-template-rows: repeat(3, 32px) !important;
-          }
-          .numbers .cell { font-size: 9px !important; }
-          .colbets { width: 26px !important; }
-          .colbets .cell { font-size: 7px !important; }
-          .lower { margin-left: 22px !important; margin-right: 26px !important; }
-          .lower .cell { height: 26px !important; font-size: 8px !important; letter-spacing: 0 !important; }
-          .placed { width: 22px !important; height: 22px !important; font-size: 8px !important; }
-
-          .ctrl {
-            flex-direction: column !important;
-            gap: 8px !important;
-            padding: 8px 12px 16px !important;
-            flex-shrink: 0 !important;
-            border-top: 1px solid rgba(217,182,90,.2) !important;
-            background: linear-gradient(0deg, rgba(7,5,2,.97), rgba(7,5,2,.6)) !important;
-          }
-          .chip-sel { gap: 8px !important; justify-content: center !important; }
-          .chip-sel .chip { width: 46px !important; height: 46px !important; font-size: 11px !important; }
-          .chip-sel .chip.sel { transform: translateY(-3px) !important; outline-width: 2px !important; }
-          .ctrl-right { width: 100% !important; justify-content: space-between !important; gap: 8px !important; }
-          .ctrl-right .btn { flex: 1 !important; min-width: 0 !important; font-size: 14px !important; padding: 12px 0 !important; }
-          .total-bet { font-size: 12px !important; white-space: nowrap; }
-          .total-bet b { font-size: 14px !important; }
+          /* Controls: pinned at bottom */
+          .ctrl { flex-shrink:0 !important; flex-direction:column !important; gap:8px !important; padding:8px 12px 20px !important; border-top:1px solid rgba(217,182,90,.2) !important; background:linear-gradient(0deg,rgba(7,5,2,.97),rgba(7,5,2,.5)) !important; }
+          .chip-sel { gap:8px !important; justify-content:center !important; }
+          .chip-sel .chip { width:46px !important; height:46px !important; font-size:11px !important; }
+          .chip-sel .chip.sel { transform:translateY(-3px) !important; outline-width:2px !important; }
+          .ctrl-right { width:100% !important; justify-content:space-between !important; gap:8px !important; }
+          .ctrl-right .btn { flex:1 !important; min-width:0 !important; font-size:14px !important; padding:12px 0 !important; }
+          .total-bet { font-size:12px !important; white-space:nowrap !important; }
+          .total-bet b { font-size:14px !important; }
         }
       `}</style>
     </div>
