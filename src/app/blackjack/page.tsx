@@ -6,6 +6,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { generateCode, prettyCode } from '@/lib/invite-codes'
 
+const DIRECTOR_EMAIL = 'vedantbhatia8@gmail.com'
+
 const SUITS = [
   { s: '♠', c: 'black' }, { s: '♥', c: 'red' },
   { s: '♦', c: 'red' }, { s: '♣', c: 'black' }
@@ -13,7 +15,7 @@ const SUITS = [
 const RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K']
 
 interface Card { rank: string; suit: string; color: string }
-type Phase = 'bet' | 'deal' | 'player' | 'dealer' | 'done'
+type Phase = 'bet' | 'deal' | 'player' | 'dealer' | 'done' | 'waiting_for_guest'
 interface HandResult { kind: string; msg: string; net: number }
 
 function freshDeck(): Card[] {
@@ -133,8 +135,16 @@ export default function BlackjackPage() {
   const [guestHideHole, setGuestHideHole] = useState(true)
   const [guestResult, setGuestResult] = useState<HandResult|null>(null)
   const [guestDoubled, setGuestDoubled] = useState(false)
+  // Host sees guest's hand; guest sees host's hand
+  const [guestShownCards, setGuestShownCards] = useState<Card[]>([])
+  const [hostShownCards, setHostShownCards] = useState<Card[]>([])
+  const [guestJoined, setGuestJoined] = useState(false)
+  const guestJoinedRef = useRef(false)
 
   const [isSpectator, setIsSpectator] = useState(false)
+  const [kicked, setKicked] = useState(false)
+  const [userEmail, setUserEmail] = useState('')
+
   const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const autoCountRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const deckRef = useRef<Card[]>([])
@@ -152,6 +162,12 @@ export default function BlackjackPage() {
   const guestDealerRef = useRef<Card[]>([])
   const hostLeftRef = useRef(false)
   const botDealerStartedRef = useRef(false)
+  // Refs for spectator STATE broadcasts
+  const playerRef = useRef<Card[]>([])
+  const dealerRef = useRef<Card[]>([])
+  const phaseRef = useRef<Phase>('bet')
+  const hideHoleRef = useRef(true)
+
   const router = useRouter()
   const supabase = createClient()
 
@@ -161,18 +177,23 @@ export default function BlackjackPage() {
   useEffect(() => { guestBetRef.current = guestBet }, [guestBet])
   useEffect(() => { guestPhaseRef.current = guestPhase }, [guestPhase])
   useEffect(() => { guestDealerRef.current = guestDealer }, [guestDealer])
+  useEffect(() => { playerRef.current = player }, [player])
+  useEffect(() => { dealerRef.current = dealer }, [dealer])
+  useEffect(() => { phaseRef.current = phase }, [phase])
+  useEffect(() => { hideHoleRef.current = hideHole }, [hideHole])
 
   useEffect(() => {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
+      if (user.email) setUserEmail(user.email)
 
       const params = new URLSearchParams(window.location.search)
       const jc = params.get('join')
       const sc = params.get('spectate')
 
       if (jc) {
-        // Guest player — same dealer, own hand
+        // Guest player
         isGuestRef.current = true
         setIsGuest(true)
         const { data: profile } = await supabase.from('profiles').select('chips').eq('id', user.id).single()
@@ -180,7 +201,7 @@ export default function BlackjackPage() {
 
         const ch = supabase.channel(`ht-game-${jc.toUpperCase()}`)
         ch.on('broadcast', { event: 'BJ_DEAL_START' }, async ({ payload }) => {
-          const { dealerUpcard } = payload as { dealerUpcard: Card }
+          const { dealerUpcard, guestCards, hostCards } = payload as { dealerUpcard: Card; guestCards?: Card[]; hostCards?: Card[] }
           const stake = guestBetRef.current
           if (stake <= 0) return
           setBal(b => b - stake)
@@ -188,15 +209,32 @@ export default function BlackjackPage() {
           setGuestHideHole(true)
           setGuestDoubled(false)
           setGuestResult(null)
-          if (guestDeckRef.current.length < 20) guestDeckRef.current = shuffle(freshDeck())
-          const p = [guestDeckRef.current.pop()!, guestDeckRef.current.pop()!]
+          if (hostCards) setHostShownCards(hostCards)
+          // Use cards dealt by host, or fall back to local deck
+          let p: Card[]
+          if (guestCards && guestCards.length >= 2) {
+            p = guestCards
+          } else {
+            if (guestDeckRef.current.length < 20) guestDeckRef.current = shuffle(freshDeck())
+            p = [guestDeckRef.current.pop()!, guestDeckRef.current.pop()!]
+          }
           setGuestPlayer(p)
-          if (handValue(p).total === 21) setGuestPhase('waiting')
-          else setGuestPhase('playing')
+          if (handValue(p).total === 21) {
+            // auto-stand on blackjack
+            channelRef.current?.send({ type: 'broadcast', event: 'BJ_GUEST_DONE', payload: { cards: p } }).catch(() => {})
+            setGuestPhase('waiting')
+          } else {
+            setGuestPhase('playing')
+          }
+        })
+        .on('broadcast', { event: 'BJ_HOST_ACTION' }, ({ payload }) => {
+          const { cards } = payload as { cards: Card[] }
+          setHostShownCards(cards)
         })
         .on('broadcast', { event: 'BJ_DEALER_DONE' }, ({ payload }) => {
           if (hostLeftRef.current) return
-          const { dealerHand } = payload as { dealerHand: Card[] }
+          const { dealerHand, hostCards } = payload as { dealerHand: Card[]; hostCards?: Card[] }
+          if (hostCards) setHostShownCards(hostCards)
           const myHand = guestHandRef.current
           const myStake = guestBetRef.current
           if (myStake <= 0 || guestPhaseRef.current === 'betting') return
@@ -218,6 +256,10 @@ export default function BlackjackPage() {
           setToast({ msg: msg + (net > 0 ? '  +'+fmt(net) : net < 0 ? '  −'+fmt(-net) : ''), kind: kind === 'push' ? '' : kind })
           fetch('/api/game/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ game: 'blackjack', chips_wagered: myStake, chips_won: payout }) }).catch(() => {})
         })
+        .on('broadcast', { event: 'ADMIN_KICK' }, () => {
+          setKicked(true)
+          setTimeout(() => router.push('/'), 3000)
+        })
         .on('presence', { event: 'leave' }, ({ leftPresences }) => {
           if ((leftPresences as unknown as Array<{role: string}>).some((p: {role: string}) => p.role === 'host')) {
             hostLeftRef.current = true
@@ -237,8 +279,9 @@ export default function BlackjackPage() {
         setIsSpectator(true)
         const ch = supabase.channel(`ht-game-${sc.toUpperCase()}`)
         ch.on('broadcast', { event: 'STATE' }, ({ payload }) => {
-          const { p, d, ph } = payload as { p: Card[]; d: Card[]; ph: string }
+          const { p, d, ph, hideHole: hh } = payload as { p: Card[]; d: Card[]; ph: string; hideHole?: boolean }
           setPlayer(p); setDealer(d); setPhase(ph as Phase)
+          if (hh !== undefined) setHideHole(hh)
         }).subscribe(status => {
           if (status === 'SUBSCRIBED') ch.send({ type: 'broadcast', event: 'SPECTATOR_JOIN', payload: {} }).catch(() => {})
         })
@@ -260,16 +303,49 @@ export default function BlackjackPage() {
         roomCodeRef.current = code
         fetch('/api/game/room', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, game: 'blackjack', status: 'solo' }) }).catch(() => {})
         const ch = supabase.channel(`ht-game-${code}`, { config: { broadcast: { self: false } } })
-        ch.on('broadcast', { event: 'SPECTATOR_JOIN' }, () => {})
-          .subscribe(status => {
-            if (status === 'SUBSCRIBED') ch.track({ role: 'host' }).catch(() => {})
-          })
+        ch.on('broadcast', { event: 'SPECTATOR_JOIN' }, () => {
+          ch.send({ type: 'broadcast', event: 'STATE', payload: {
+            p: playerRef.current, d: dealerRef.current, ph: phaseRef.current, hideHole: hideHoleRef.current
+          }}).catch(() => {})
+        })
+        .on('broadcast', { event: 'GUEST_JOIN' }, () => {
+          guestJoinedRef.current = true
+          setGuestJoined(true)
+        })
+        .on('broadcast', { event: 'BJ_GUEST_ACTION' }, ({ payload }) => {
+          const { cards } = payload as { cards: Card[] }
+          setGuestShownCards(cards)
+        })
+        .on('broadcast', { event: 'BJ_GUEST_DONE' }, ({ payload }) => {
+          const { cards } = payload as { cards: Card[] }
+          setGuestShownCards(cards)
+          if (phaseRef.current === 'waiting_for_guest') setPhase('player')
+        })
+        .on('broadcast', { event: 'ADMIN_KICK' }, () => {
+          setKicked(true)
+          setTimeout(() => router.push('/'), 3000)
+        })
+        .on('presence', { event: 'leave' }, ({ leftPresences }) => {
+          if ((leftPresences as unknown as Array<{role: string}>).some((p: {role: string}) => p.role === 'guest')) {
+            guestJoinedRef.current = false
+            setGuestJoined(false)
+            if (phaseRef.current === 'waiting_for_guest') setPhase('player')
+          }
+        })
+        .subscribe(status => {
+          if (status === 'SUBSCRIBED') ch.track({ role: 'host' }).catch(() => {})
+        })
         channelRef.current = ch
       }
       setLoading(false)
     }
     init()
-    return () => { channelRef.current?.unsubscribe() }
+    return () => {
+      channelRef.current?.unsubscribe()
+      if (roomCodeRef.current && !isGuestRef.current && !isSpectatorRef.current) {
+        fetch('/api/game/room', { method: 'POST', headers: { 'Content-Type': 'application/json' }, keepalive: true, body: JSON.stringify({ code: roomCodeRef.current, game: 'blackjack', status: 'ended' }) }).catch(() => {})
+      }
+    }
   }, [router])
 
   // Bot dealer: runs when host disconnects while guest is waiting for dealer result
@@ -349,6 +425,7 @@ export default function BlackjackPage() {
       setHideHole(true); setDoubled(false)
       setSplitCards([]); setSplitBet(0); setOnSplit(false)
       setHand1Cards([]); setHand1Stake(0)
+      setGuestShownCards([])
       const newBal = balRef.current - betAmt
       setBal(newBal)
       setPhase('deal')
@@ -360,7 +437,9 @@ export default function BlackjackPage() {
       d.push(deckRef.current.pop()!); setDealer([...d]); await sleep(260)
       p.push(deckRef.current.pop()!); setPlayer([...p]); await sleep(260)
       d.push(deckRef.current.pop()!); setDealer([...d]); await sleep(360)
-      channelRef.current?.send({ type: 'broadcast', event: 'BJ_DEAL_START', payload: { dealerUpcard: d[0] } }).catch(() => {})
+      const guestC = guestJoinedRef.current ? [deckRef.current.pop()!, deckRef.current.pop()!] : null
+      channelRef.current?.send({ type: 'broadcast', event: 'BJ_DEAL_START', payload: { dealerUpcard: d[0], guestCards: guestC, hostCards: p } }).catch(() => {})
+      channelRef.current?.send({ type: 'broadcast', event: 'STATE', payload: { p, d, ph: 'player', hideHole: true } }).catch(() => {})
       const pv = handValue(p).total, dv = handValue(d).total
       if (pv === 21 || dv === 21) {
         setHideHole(false); await sleep(500)
@@ -369,7 +448,11 @@ export default function BlackjackPage() {
         else finishSingle('lose', d, p, betAmt, 'Dealer Blackjack')
         return
       }
-      setPhase('player')
+      if (guestJoinedRef.current) {
+        setPhase('waiting_for_guest')
+      } else {
+        setPhase('player')
+      }
     }, DELAY)
     return () => { clearTimeout(autoTimerRef.current!); clearInterval(autoCountRef.current!) }
   }, [phase, autoDeal])
@@ -397,6 +480,7 @@ export default function BlackjackPage() {
     setHideHole(true)
     setSplitCards([]); setSplitBet(0); setOnSplit(false)
     setHand1Cards([]); setHand1Stake(0)
+    setGuestShownCards([])
     if (deckRef.current.length < 20) deckRef.current = shuffle(freshDeck())
     setPhase('deal')
     const p: Card[] = [], d: Card[] = []
@@ -406,8 +490,10 @@ export default function BlackjackPage() {
     d.push(draw()); setDealer([...d]); await sleep(260)
     p.push(draw()); setPlayer([...p]); await sleep(260)
     d.push(draw()); setDealer([...d]); await sleep(360)
-    // Broadcast to guests so they can play against same dealer
-    channelRef.current?.send({ type: 'broadcast', event: 'BJ_DEAL_START', payload: { dealerUpcard: d[0] } }).catch(() => {})
+    // Deal guest cards from same deck if guest is present
+    const guestC = guestJoinedRef.current ? [draw(), draw()] : null
+    channelRef.current?.send({ type: 'broadcast', event: 'BJ_DEAL_START', payload: { dealerUpcard: d[0], guestCards: guestC, hostCards: p } }).catch(() => {})
+    channelRef.current?.send({ type: 'broadcast', event: 'STATE', payload: { p, d, ph: 'player', hideHole: true } }).catch(() => {})
     const pv = handValue(p).total, dv = handValue(d).total
     if (pv === 21 || dv === 21) {
       setHideHole(false); await sleep(500)
@@ -416,7 +502,12 @@ export default function BlackjackPage() {
       else finishSingle('lose', d, p, bet, 'Dealer Blackjack')
       return
     }
-    setPhase('player')
+    // Guest plays first if they joined
+    if (guestJoinedRef.current) {
+      setPhase('waiting_for_guest')
+    } else {
+      setPhase('player')
+    }
   }
 
   async function hit() {
@@ -424,12 +515,15 @@ export default function BlackjackPage() {
     if (onSplit) {
       const s = [...splitCards, draw()]
       setSplitCards(s); await sleep(300)
+      channelRef.current?.send({ type: 'broadcast', event: 'BJ_HOST_ACTION', payload: { cards: s } }).catch(() => {})
       const v = handValue(s).total
       if (v > 21) await runDealer(hand1Cards, hand1Stake, s, splitBet)
       else if (v === 21) await runDealer(hand1Cards, hand1Stake, s, splitBet)
     } else {
       const p = [...player, draw()]
       setPlayer(p); await sleep(300)
+      channelRef.current?.send({ type: 'broadcast', event: 'BJ_HOST_ACTION', payload: { cards: p } }).catch(() => {})
+      channelRef.current?.send({ type: 'broadcast', event: 'STATE', payload: { p, d: dealerRef.current, ph: 'player', hideHole: true } }).catch(() => {})
       const v = handValue(p).total
       if (v > 21) {
         if (splitCards.length > 0) { setHand1Cards(p); setHand1Stake(doubled ? lastBet*2 : lastBet); setOnSplit(true) }
@@ -450,6 +544,7 @@ export default function BlackjackPage() {
       setSplitBet(newStake)
       const s = [...splitCards, draw()]
       setSplitCards(s); await sleep(380)
+      channelRef.current?.send({ type: 'broadcast', event: 'BJ_HOST_ACTION', payload: { cards: s } }).catch(() => {})
       await runDealer(hand1Cards, hand1Stake, s, newStake)
     } else {
       if (player.length !== 2 || bal < lastBet) return
@@ -458,6 +553,7 @@ export default function BlackjackPage() {
       const stake = lastBet * 2
       const p = [...player, draw()]
       setPlayer(p); await sleep(380)
+      channelRef.current?.send({ type: 'broadcast', event: 'BJ_HOST_ACTION', payload: { cards: p } }).catch(() => {})
       const v = handValue(p).total
       if (v > 21) {
         if (splitCards.length > 0) { setHand1Cards(p); setHand1Stake(stake); setOnSplit(true) }
@@ -543,8 +639,9 @@ export default function BlackjackPage() {
       showToast(msg1 + (net1 > 0 ? '  +'+fmt(net1) : net1 < 0 ? '  −'+fmt(-net1) : ''), kind1 === 'push' ? '' : kind1)
     }
 
-    // Broadcast final dealer hand to guests
-    channelRef.current?.send({ type: 'broadcast', event: 'BJ_DEALER_DONE', payload: { dealerHand: d } }).catch(() => {})
+    // Broadcast final dealer hand to guests, include host's final hand so guest can display it
+    channelRef.current?.send({ type: 'broadcast', event: 'BJ_DEALER_DONE', payload: { dealerHand: d, hostCards: h1 } }).catch(() => {})
+    channelRef.current?.send({ type: 'broadcast', event: 'STATE', payload: { p: h1, d, ph: 'done', hideHole: false } }).catch(() => {})
 
     try {
       await fetch('/api/game/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ game: 'blackjack', chips_wagered: s1 + (h2 ? s2 : 0), chips_won: payout1 + payout2 }) })
@@ -563,8 +660,8 @@ export default function BlackjackPage() {
     setBal(b => b + payout)
     setResult({ kind: kindUI, msg, net })
     showToast(msg + (net > 0 ? '  +'+fmt(net) : net < 0 ? '  −'+fmt(-net) : ''), kindUI === 'push' ? '' : kindUI)
-    // Even on instant finish, guests still waiting — send dealer done
-    channelRef.current?.send({ type: 'broadcast', event: 'BJ_DEALER_DONE', payload: { dealerHand: d } }).catch(() => {})
+    channelRef.current?.send({ type: 'broadcast', event: 'BJ_DEALER_DONE', payload: { dealerHand: d, hostCards: p } }).catch(() => {})
+    channelRef.current?.send({ type: 'broadcast', event: 'STATE', payload: { p, d, ph: 'done', hideHole: false } }).catch(() => {})
     try {
       fetch('/api/game/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ game: 'blackjack', chips_wagered: stake, chips_won: payout }) })
     } catch { /* best effort */ }
@@ -574,6 +671,7 @@ export default function BlackjackPage() {
     setPhase('bet'); setPlayer([]); setDealer([]); setResult(null); setSplitResult(null)
     setHideHole(true); setDoubled(false)
     setSplitCards([]); setSplitBet(0); setOnSplit(false); setHand1Cards([]); setHand1Stake(0)
+    setGuestShownCards([])
     setBet(lastBet && lastBet <= bal ? lastBet : 0)
   }
 
@@ -587,11 +685,16 @@ export default function BlackjackPage() {
     if (guestPhase !== 'playing') return
     const p = [...guestPlayer, guestDraw()]
     setGuestPlayer(p); await sleep(300)
-    if (handValue(p).total >= 21) setGuestPhase('waiting')
+    channelRef.current?.send({ type: 'broadcast', event: 'BJ_GUEST_ACTION', payload: { cards: p } }).catch(() => {})
+    if (handValue(p).total >= 21) {
+      channelRef.current?.send({ type: 'broadcast', event: 'BJ_GUEST_DONE', payload: { cards: p } }).catch(() => {})
+      setGuestPhase('waiting')
+    }
   }
 
   function guestStand() {
     if (guestPhase !== 'playing') return
+    channelRef.current?.send({ type: 'broadcast', event: 'BJ_GUEST_DONE', payload: { cards: guestPlayer } }).catch(() => {})
     setGuestPhase('waiting')
   }
 
@@ -603,6 +706,7 @@ export default function BlackjackPage() {
     setGuestDoubled(true)
     const p = [...guestPlayer, guestDraw()]
     setGuestPlayer(p); await sleep(380)
+    channelRef.current?.send({ type: 'broadcast', event: 'BJ_GUEST_DONE', payload: { cards: p } }).catch(() => {})
     setGuestPhase('waiting')
   }
 
@@ -611,11 +715,22 @@ export default function BlackjackPage() {
     setGuestPlayer([]); setGuestDealer([]); setGuestResult(null)
     setGuestHideHole(true); setGuestDoubled(false)
     setGuestBet(0)
+    setHostShownCards([])
   }
 
   if (loading) return (
     <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center'}}>
       <div style={{color:'var(--gold-l)',fontFamily:'var(--fs-head)',letterSpacing:'.1em'}}>Loading…</div>
+    </div>
+  )
+
+  if (kicked) return (
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'radial-gradient(120% 80% at 50% -10%, #241f15 0%, #13110b 45%, #0b0a07 100%)'}}>
+      <div style={{textAlign:'center',padding:40}}>
+        <div style={{fontSize:52,marginBottom:16}}>🚫</div>
+        <h2 style={{fontFamily:'var(--fs-head)',fontWeight:700,fontSize:24,color:'var(--gold-l)',marginBottom:12}}>Removed by Admin</h2>
+        <p style={{color:'var(--cream-dim)',fontSize:15}}>Returning to lobby…</p>
+      </div>
     </div>
   )
 
@@ -647,8 +762,13 @@ export default function BlackjackPage() {
     <div className="table-wrap">
       {toast && <Toast msg={toast.msg} kind={toast.kind} onDone={() => setToast(null)} />}
       {isSpectator && (
-        <div style={{ position:'sticky', top:0, zIndex:50, background:'rgba(217,182,90,.12)', borderBottom:'1px solid rgba(217,182,90,.3)', padding:'8px 24px', textAlign:'center', fontFamily:'var(--fs-head)', fontSize:12, letterSpacing:'.12em', color:'var(--gold-l)', textTransform:'uppercase' }}>
-          👁 Spectating Live — Read Only
+        <div style={{ position:'sticky', top:0, zIndex:50, background:'rgba(217,182,90,.12)', borderBottom:'1px solid rgba(217,182,90,.3)', padding:'8px 24px', textAlign:'center', fontFamily:'var(--fs-head)', fontSize:12, letterSpacing:'.12em', color:'var(--gold-l)', textTransform:'uppercase', display:'flex', alignItems:'center', justifyContent:'center', gap:16 }}>
+          <span>👁 Spectating Live — Read Only</span>
+          {userEmail === DIRECTOR_EMAIL && (
+            <button onClick={() => channelRef.current?.send({ type:'broadcast', event:'ADMIN_KICK', payload:{} }).catch(() => {})} style={{ padding:'5px 16px', background:'#b91c1c', border:'1px solid #ef4444', borderRadius:999, cursor:'pointer', color:'#fff', fontFamily:'var(--fs-head)', fontSize:10, letterSpacing:'.12em', textTransform:'uppercase', fontWeight:700 }}>
+              Kick Player
+            </button>
+          )}
         </div>
       )}
       {isGuest && (
@@ -693,6 +813,15 @@ export default function BlackjackPage() {
             {guestDealer.length > 0 && <ValBadge cards={guestDealer} hideHole={guestHideHole} />}
           </div>
 
+          {/* Show host's hand to guest */}
+          {hostShownCards.length > 0 && (
+            <div className="zone" style={{flex:'none',paddingBottom:8}}>
+              <div className="seat-label" style={{color:'rgba(217,182,90,.6)'}}>Host&apos;s Hand</div>
+              <div className="hand">{hostShownCards.map((c, i) => <PlayingCard key={i} card={c} idx={i} />)}</div>
+              <ValBadge cards={hostShownCards} hideHole={false} />
+            </div>
+          )}
+
           {guestResult && !guestHideHole && (
             <div className="status">
               <div className={'msg '+guestResult.kind}>{guestResult.msg}</div>
@@ -723,6 +852,15 @@ export default function BlackjackPage() {
             </div>
             {dealer.length > 0 && <ValBadge cards={dealer} hideHole={hideHole} />}
           </div>
+
+          {/* Show guest's hand to host */}
+          {guestJoined && guestShownCards.length > 0 && (
+            <div className="zone" style={{flex:'none',paddingBottom:8}}>
+              <div className="seat-label" style={{color:'rgba(58,208,122,.7)'}}>Friend&apos;s Hand</div>
+              <div className="hand">{guestShownCards.map((c, i) => <PlayingCard key={i} card={c} idx={i} />)}</div>
+              <ValBadge cards={guestShownCards} hideHole={false} />
+            </div>
+          )}
 
           {result && !isSplit && (
             <div className="status">
@@ -863,6 +1001,10 @@ export default function BlackjackPage() {
               </>
             )}
 
+            {phase === 'waiting_for_guest' && (
+              <div className="seat-label" style={{margin:0,fontSize:14,color:'#3ad07a'}}>Waiting for friend to play…</div>
+            )}
+
             {phase === 'player' && (
               <div className="actions">
                 <button className="btn" onClick={hit}>Hit</button>
@@ -927,7 +1069,7 @@ export default function BlackjackPage() {
           <div className="modal gilt" onClick={e => e.stopPropagation()}>
             <button className="x" onClick={() => setShowInvite(false)}>×</button>
             <h2 className="gold-text">Invite to your table</h2>
-            <p>Share this code — friends who join will play against the same dealer with their own chips.</p>
+            <p>Share this code — friends who join will play against the same dealer with their own chips. Guest plays their hand first, then you play yours.</p>
             <div style={{textAlign:'center',margin:'18px 0'}}>
               <div style={{fontFamily:'var(--fs-head)',fontSize:36,fontWeight:800,letterSpacing:'.15em',color:'var(--gold-l)',background:'rgba(0,0,0,.4)',border:'1px solid rgba(217,182,90,.3)',borderRadius:14,padding:'18px 28px',display:'inline-block'}}>{prettyCode(roomCodeRef.current)}</div>
             </div>
@@ -958,7 +1100,7 @@ export default function BlackjackPage() {
                 </ul>
               </div>
               <p><strong style={{color:'var(--cream)'}}>Dealer Rules:</strong> The dealer must hit until reaching 17 or higher, then must stand.</p>
-              <p><strong style={{color:'var(--cream)'}}>Multiplayer:</strong> Use Invite to share a code. Friends join and play against the same dealer — everyone wins or loses on their own.</p>
+              <p><strong style={{color:'var(--cream)'}}>Multiplayer:</strong> Use Invite to share a code. The guest plays their hand first, then the host plays. Both play against the same dealer — everyone wins or loses on their own.</p>
               <p><strong style={{color:'var(--cream)'}}>Auto Deal:</strong> Toggle Auto Deal ON to automatically start the next hand using the same bet amount.</p>
             </div>
           </div>

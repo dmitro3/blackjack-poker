@@ -46,7 +46,7 @@ export async function GET() {
         .select('code, game, host_id')
         .in('host_id', friendIds)
         .neq('status', 'ended')
-        .gt('updated_at', new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()),
+        .gt('updated_at', new Date(Date.now() - 15 * 60 * 1000).toISOString()),
     ])
 
     if (profilesRes.error) console.error('profiles query error:', profilesRes.error.message)

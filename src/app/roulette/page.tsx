@@ -80,9 +80,11 @@ export default function RoulettePage() {
   const [isSpectator, setIsSpectator] = useState(false)
   const [isGuest, setIsGuest] = useState(false)
   const [userEmail, setUserEmail] = useState('')
+  const [hostBets, setHostBets] = useState<Record<string, number>>({})
   const wheelRef = useRef<HTMLDivElement>(null)
   const ballRef = useRef<HTMLDivElement>(null)
   const rotRef = useRef(0)
+  const guestRotRef = useRef(0)
   const roomCodeRef = useRef('')
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const isSpectatorRef = useRef(false)
@@ -118,7 +120,21 @@ export default function RoulettePage() {
         if (profile) setBal(profile.chips)
 
         const ch = supabase.channel(`ht-game-${jc.toUpperCase()}`, { config: { broadcast: { self: false } } })
-        ch.on('broadcast', { event: 'SPIN_START' }, () => { setSpinning(true); setWin(null) })
+        ch.on('broadcast', { event: 'SPIN_START' }, () => {
+            setSpinning(true); setWin(null)
+            // Animate wheel for guest
+            const spinAmount = 360 * 5 + Math.random() * 360
+            guestRotRef.current += spinAmount
+            const gr = guestRotRef.current
+            if (wheelRef.current) wheelRef.current.style.transform = `rotate(${gr}deg)`
+            const ballR = Math.round((wheelRef.current?.offsetWidth ?? 304) * 0.434)
+            if (ballRef.current) ballRef.current.style.transform =
+              `rotate(${-360*9 - gr}deg) translate(0, -${ballR}px) rotate(${360*9 + gr}deg)`
+          })
+          .on('broadcast', { event: 'BETS_UPDATE' }, ({ payload }) => {
+            const p = payload as { bets?: Record<string, number> }
+            setHostBets(p.bets || {})
+          })
           .on('broadcast', { event: 'SPIN_END' }, ({ payload }) => {
             const p = payload as { num?: number }
             if (p.num === undefined) return
@@ -132,6 +148,7 @@ export default function RoulettePage() {
             setWin({ num: w, net })
             setSpinning(false)
             setBets({})
+            setHostBets({})
             const label = w===0?'Zero':(colOf(w)==='red'?'Red ':'Black ')+w
             setToast({ msg: label+(net>0?'  +'+fmt(net):net<0?'  −'+fmt(wagered):''), kind: net>0?'win':(net<0?'lose':'') })
             if (wagered > 0) {
@@ -216,8 +233,12 @@ export default function RoulettePage() {
     if (spinning) return
     if (bal < chip) { showToast('Not enough chips'); return }
     setBal(b => b - chip)
-    setBets(b => ({ ...b, [key]: (b[key]||0)+chip }))
+    const newBets = { ...betsRef.current, [key]: (betsRef.current[key]||0)+chip }
+    setBets(newBets)
     setWin(null)
+    if (!isGuestRef.current && !isSpectatorRef.current) {
+      channelRef.current?.send({ type: 'broadcast', event: 'BETS_UPDATE', payload: { bets: newBets } }).catch(() => {})
+    }
   }
 
   function clearAll() {
@@ -225,6 +246,9 @@ export default function RoulettePage() {
     setBal(b => b + total)
     setBets({})
     setWin(null)
+    if (!isGuestRef.current && !isSpectatorRef.current) {
+      channelRef.current?.send({ type: 'broadcast', event: 'BETS_UPDATE', payload: { bets: {} } }).catch(() => {})
+    }
   }
 
   function betWins(key: string, w: number): boolean {
@@ -295,13 +319,18 @@ export default function RoulettePage() {
     </div>
   ))
 
+  const HostChip = ({ k, bg }: { k: string; bg?: string }) =>
+    hostBets[k] ? <span className="placed host-chip" style={{background:bg||'rgba(217,182,90,.7)',color:'#2a1f08'}}>{fmtShort(hostBets[k])}</span> : null
+
   const numCells: React.ReactNode[] = []
   for (let n = 1; n <= 36; n++) {
     const col = Math.ceil(n/3)
     const row = n%3===0?1:(n%3===2?2:3)
     numCells.push(
-      <div key={n} className={'cell '+colOf(n)} style={{gridColumn:col,gridRow:row}} onClick={() => place('n-'+n)}>
-        {n}{bets['n-'+n] ? <span className="placed" style={{background:'#2a2a6e'}}>{fmtShort(bets['n-'+n])}</span> : null}
+      <div key={n} className={'cell '+colOf(n)} style={{gridColumn:col,gridRow:row}} onClick={() => canInteract && place('n-'+n)}>
+        {n}
+        {bets['n-'+n] ? <span className="placed" style={{background:'#2a2a6e'}}>{fmtShort(bets['n-'+n])}</span> : null}
+        <HostChip k={'n-'+n} bg={colOf(n)==='red'?'rgba(251,191,36,.85)':'rgba(217,182,90,.85)'} />
       </div>
     )
   }
@@ -406,30 +435,30 @@ export default function RoulettePage() {
           <div className="board-scroll">
             <div className="board">
               <div className="cell zero green" onClick={() => canInteract && place('n-0')} style={{position:'relative'}}>
-                0<Chip k="n-0" bg="#137a4a" />
+                0<Chip k="n-0" bg="#137a4a" /><HostChip k="n-0" bg="rgba(217,182,90,.85)" />
               </div>
               <div style={{flex:1,display:'flex',flexDirection:'column'}}>
                 <div style={{display:'flex'}}>
                   <div className="numbers" style={{flex:1}}>{numCells}</div>
                   <div className="colbets">
                     {[1,2,3].map(c => (
-                      <div key={c} className="cell" onClick={() => canInteract && place('col-'+c)}>2:1<Chip k={'col-'+c}/></div>
+                      <div key={c} className="cell" onClick={() => canInteract && place('col-'+c)}>2:1<Chip k={'col-'+c}/><HostChip k={'col-'+c}/></div>
                     ))}
                   </div>
                 </div>
                 <div className="lower">
                   <div className="dozens">
-                    <div className="cell" onClick={() => canInteract && place('dozen-1')}>1st 12<Chip k="dozen-1"/></div>
-                    <div className="cell" onClick={() => canInteract && place('dozen-2')}>2nd 12<Chip k="dozen-2"/></div>
-                    <div className="cell" onClick={() => canInteract && place('dozen-3')}>3rd 12<Chip k="dozen-3"/></div>
+                    <div className="cell" onClick={() => canInteract && place('dozen-1')}>1st 12<Chip k="dozen-1"/><HostChip k="dozen-1"/></div>
+                    <div className="cell" onClick={() => canInteract && place('dozen-2')}>2nd 12<Chip k="dozen-2"/><HostChip k="dozen-2"/></div>
+                    <div className="cell" onClick={() => canInteract && place('dozen-3')}>3rd 12<Chip k="dozen-3"/><HostChip k="dozen-3"/></div>
                   </div>
                   <div className="outside">
-                    <div className="cell" onClick={() => canInteract && place('low')}>1–18<Chip k="low"/></div>
-                    <div className="cell" onClick={() => canInteract && place('even')}>EVEN<Chip k="even"/></div>
-                    <div className="cell red" onClick={() => canInteract && place('red')}>RED<Chip k="red" bg="#8f0f22"/></div>
-                    <div className="cell black" onClick={() => canInteract && place('black')}>BLACK<Chip k="black" bg="#000"/></div>
-                    <div className="cell" onClick={() => canInteract && place('odd')}>ODD<Chip k="odd"/></div>
-                    <div className="cell" onClick={() => canInteract && place('high')}>19–36<Chip k="high"/></div>
+                    <div className="cell" onClick={() => canInteract && place('low')}>1–18<Chip k="low"/><HostChip k="low"/></div>
+                    <div className="cell" onClick={() => canInteract && place('even')}>EVEN<Chip k="even"/><HostChip k="even"/></div>
+                    <div className="cell red" onClick={() => canInteract && place('red')}>RED<Chip k="red" bg="#8f0f22"/><HostChip k="red" bg="rgba(251,191,36,.85)"/></div>
+                    <div className="cell black" onClick={() => canInteract && place('black')}>BLACK<Chip k="black" bg="#000"/><HostChip k="black"/></div>
+                    <div className="cell" onClick={() => canInteract && place('odd')}>ODD<Chip k="odd"/><HostChip k="odd"/></div>
+                    <div className="cell" onClick={() => canInteract && place('high')}>19–36<Chip k="high"/><HostChip k="high"/></div>
                   </div>
                 </div>
               </div>
@@ -568,6 +597,7 @@ export default function RoulettePage() {
         .lower .cell.red { background:linear-gradient(160deg,#c4152e,#8f0f22); }
         .lower .cell.black { background:linear-gradient(160deg,#262626,#111); }
         .placed { position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:4;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;font-weight:800;border:2px dashed rgba(255,255,255,.7);box-shadow:0 3px 8px rgba(0,0,0,.5);pointer-events:none;animation:floatUp .25s; }
+        .host-chip { top:4px !important; left:4px !important; transform:none !important; width:22px !important; height:22px !important; font-size:8px !important; border-style:solid !important; opacity:.9; }
         .ctrl { display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:14px 24px 18px;border-top:1px solid rgba(217,182,90,.18); }
         .chip-sel { display:flex;gap:10px;align-items:center; }
         .chip-sel .chip { width:54px;height:54px;font-size:13px; }

@@ -14,6 +14,12 @@ export async function POST(req: Request) {
     if (status === 'solo' || status === 'waiting') {
       const { data: profile } = await admin
         .from('profiles').select('display_name').eq('id', user.id).single()
+      // End all other active rooms for this user before creating a new one
+      await admin.from('game_rooms')
+        .update({ status: 'ended', updated_at: new Date().toISOString() })
+        .eq('host_id', user.id)
+        .neq('status', 'ended')
+        .neq('code', code)
       await admin.from('game_rooms').upsert({
         code,
         game: game || 'blackjack',
