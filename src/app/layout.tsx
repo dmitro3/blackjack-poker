@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import AdminBubble from "@/components/AdminBubble";
+import HeartbeatProvider from "@/components/HeartbeatProvider";
 
 export const metadata: Metadata = {
   title: "HouseTables — Private Card Room",
@@ -21,6 +22,7 @@ export default function RootLayout({
     <html lang="en" className="h-full">
       <body className="min-h-full">
         {children}
+        <HeartbeatProvider />
         <AdminBubble />
       </body>
     </html>

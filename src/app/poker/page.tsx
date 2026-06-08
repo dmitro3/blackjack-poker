@@ -168,16 +168,79 @@ export default function PokerPage() {
           joinCodeRef.current = sc.toUpperCase()
           modeRef.current = 'spectator'
         } else {
-          // Host/solo mode — create local game
+          // Host/solo mode — create local game and channel immediately
+          const code = generateCode('poker')
+          inviteCodeRef.current = code
+
           const game = new PokerGame(SEATS, profile.chips)
           game.onBankChange = (chips: number) => setBal(chips)
-          // Use real display name so guests see the correct name
           if (profile.display_name) {
             game.players[0].name = profile.display_name
             game.players[0].avatar = profile.display_name[0].toUpperCase()
           }
           gameRef.current = game
           setSnap(game.snapshot())
+
+          // Register room so admin can discover + spectate even solo games
+          fetch('/api/game/room', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code, game: 'poker', status: 'solo' }),
+          }).catch(() => {})
+
+          // Create channel immediately — spectators can join any game, even solo
+          const ch = supabase.channel(`ht-game-${code}`, { config: { broadcast: { self: false } } })
+
+          ch
+            .on('broadcast', { event: 'SPECTATOR_JOIN' }, () => {
+              const g = gameRef.current
+              if (!g) return
+              const gs = guestSeatRef.current
+              const legal = gs !== null && g.toAct === gs ? g.legal() : null
+              ch.send({
+                type: 'broadcast', event: 'STATE',
+                payload: JSON.parse(JSON.stringify({ snap: g.snapshot(), legal, guestSeat: gs })),
+              }).catch(() => {})
+            })
+            .on('broadcast', { event: 'GUEST_JOIN' }, ({ payload }) => {
+              const g = gameRef.current!
+              const gSeat = 1
+              guestSeatRef.current = gSeat
+              const guestName = (payload.name as string) || 'Guest'
+              g.players[gSeat].name = guestName
+              g.players[gSeat].avatar = guestName[0].toUpperCase()
+              g.players[gSeat].isBot = false
+              modeRef.current = 'host'
+              setGuestConnected(true)
+              setWaitingForGuest(false)
+              setToast({ msg: `${guestName} joined the table!`, kind: 'win' })
+              fetch('/api/game/room', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code, status: 'active', guestName }),
+              }).catch(() => {})
+              const gs2 = guestSeatRef.current
+              const legal2 = g.toAct === gs2 ? g.legal() : null
+              ch.send({
+                type: 'broadcast', event: 'STATE',
+                payload: JSON.parse(JSON.stringify({ snap: g.snapshot(), legal: legal2, guestSeat: gs2 })),
+              }).catch(() => {})
+              sync()
+            })
+            .on('broadcast', { event: 'ACTION' }, ({ payload }) => {
+              const g = gameRef.current
+              const gSeat = guestSeatRef.current
+              if (!g || gSeat === null || g.toAct !== gSeat) return
+              const { type, amount } = payload as { type: string; amount?: number }
+              if (type === 'call' || type === 'raise' || type === 'allin') playChip()
+              const ev = g.apply(type, amount)
+              sync()
+              if (ev === 'showdown' || ev === 'win') { endHand() }
+              else { drive() }
+            })
+            .subscribe()
+
+          channelRef.current = ch
         }
       }
       setLoading(false)
@@ -261,13 +324,13 @@ export default function PokerPage() {
     }
   }, [])
 
-  // ── sync: update local snap + broadcast to guest (host only) ──────────────
+  // ── sync: update local snap + broadcast to guests/spectators ─────────────
   const sync = useCallback(() => {
     const g = gameRef.current
     if (!g) return
     const s = { ...g.snapshot() }
     setSnap(s)
-    if (modeRef.current === 'host' && channelRef.current) {
+    if ((modeRef.current === 'host' || modeRef.current === 'solo') && channelRef.current) {
       const gs = guestSeatRef.current
       const legal = gs !== null && g.toAct === gs ? g.legal() : null
       channelRef.current.send({
@@ -345,80 +408,36 @@ export default function PokerPage() {
     channel.send({ type: 'broadcast', event: 'ACTION', payload: { type, amount } }).catch(() => {})
   }, [])
 
-  // ── handleInvite: host sets up realtime channel ───────────────────────────
-  const handleInvite = useCallback((code: string) => {
-    if (modeRef.current !== 'solo') return   // already in a multiplayer game
+  // ── handleInvite: upgrade solo→host, update room status ──────────────────
+  // Channel is already created in init(); just change mode and notify DB
+  const handleInvite = useCallback(() => {
+    if (modeRef.current !== 'solo') return
     modeRef.current = 'host'
     setWaitingForGuest(true)
-    inviteCodeRef.current = code
-
-    // Register room in DB so admin can discover it
+    const code = inviteCodeRef.current
     fetch('/api/game/room', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code, game: 'poker', status: 'waiting' }),
     }).catch(() => {})
+  }, [])
 
-    const channel = supabase.channel(`ht-game-${code}`, {
-      config: { broadcast: { self: false } },
-    })
-
-    const broadcastState = () => {
-      const g = gameRef.current
-      if (!g) return
-      const gs = guestSeatRef.current
-      const legal = gs !== null && g.toAct === gs ? g.legal() : null
-      channel.send({
-        type: 'broadcast',
-        event: 'STATE',
-        payload: JSON.parse(JSON.stringify({ snap: g.snapshot(), legal, guestSeat: gs })),
+  // Heartbeat: keep game_rooms.updated_at fresh so admin sees this room as active
+  useEffect(() => {
+    if (loading) return
+    const tick = () => {
+      const code = inviteCodeRef.current
+      if (!code) return
+      fetch('/api/game/heartbeat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
       }).catch(() => {})
     }
-
-    channel
-      .on('broadcast', { event: 'GUEST_JOIN' }, ({ payload }) => {
-        const g = gameRef.current!
-        const gSeat = 1   // replace bot at seat 1
-        guestSeatRef.current = gSeat
-        const guestName = (payload.name as string) || 'Guest'
-        g.players[gSeat].name = guestName
-        g.players[gSeat].avatar = guestName[0].toUpperCase()
-        g.players[gSeat].isBot = false
-
-        setGuestConnected(true)
-        setWaitingForGuest(false)
-        showToast(`${guestName} joined the table!`, 'win')
-
-        // Mark room active in DB
-        fetch('/api/game/room', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code, status: 'active', guestName }),
-        }).catch(() => {})
-
-        broadcastState()
-        sync()
-      })
-      .on('broadcast', { event: 'SPECTATOR_JOIN' }, () => {
-        // Send current state to new spectator without changing game
-        broadcastState()
-      })
-      .on('broadcast', { event: 'ACTION' }, ({ payload }) => {
-        const g = gameRef.current
-        const gSeat = guestSeatRef.current
-        if (!g || gSeat === null || g.toAct !== gSeat) return
-        const { type, amount } = payload as { type: string; amount?: number }
-        if (type === 'call' || type === 'raise' || type === 'allin') playChip()
-        const ev = g.apply(type, amount)
-        sync()
-        if (ev === 'showdown' || ev === 'win') { endHand() }
-        else { drive() }
-      })
-      .subscribe()
-
-    channelRef.current = channel
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sync, drive, endHand])
+    tick()
+    const id = setInterval(tick, 60000)
+    return () => clearInterval(id)
+  }, [loading])
 
   // Cleanup channel on unmount
   useEffect(() => () => { channelRef.current?.unsubscribe() }, [])
@@ -546,10 +565,9 @@ export default function PokerPage() {
               style={guestConnected ? { background: 'rgba(58,208,122,.15)', borderColor: '#3ad07a', color: '#3ad07a' } : {}}
               onClick={() => {
                 if (modeRef.current !== 'solo') return
-                const code = generateCode('poker')
-                setInviteCode(code)
+                setInviteCode(inviteCodeRef.current)
                 setShowInvite(true)
-                handleInvite(code)
+                handleInvite()
               }}
             >
               {waitingForGuest ? '⏳ Waiting…' : guestConnected ? '✓ Friend joined' : 'Invite Friend'}

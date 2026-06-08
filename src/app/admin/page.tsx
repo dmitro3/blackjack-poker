@@ -453,7 +453,7 @@ export default function AdminPage() {
             <button key={tab} style={tabStyle(activeTab === tab)} onClick={() => setActiveTab(tab)}>
               {tab === 'players' ? 'Players' : tab === 'stats' ? 'House Stats' : tab === 'live'
                 ? <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {rooms.filter(r => r.status === 'active').length > 0 && (
+                    {rooms.filter(r => r.status === 'active' || r.status === 'solo').length > 0 && (
                       <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#5fd99a', display: 'inline-block', boxShadow: '0 0 5px #5fd99a' }} />
                     )}
                     Live Games
@@ -742,7 +742,7 @@ export default function AdminPage() {
               </h2>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <span style={{ fontSize: 12, color: 'var(--cream-faint)', fontFamily: 'var(--fs-head)', letterSpacing: '.05em' }}>
-                  {rooms.filter(r => r.status === 'active').length} active · {rooms.filter(r => r.status === 'waiting').length} waiting
+                  {rooms.filter(r => r.status === 'active').length} active · {rooms.filter(r => r.status === 'solo').length} solo · {rooms.filter(r => r.status === 'waiting').length} waiting
                 </span>
                 <button className="btn btn-sm btn-ghost" onClick={() => load(true)} disabled={refreshing}
                   style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
@@ -762,19 +762,21 @@ export default function AdminPage() {
                 {rooms.map(room => {
                   const ICONS: Record<string, string> = { blackjack: '🃏', poker: '♠', roulette: '🎰', slots: '🎰', baccarat: '🎴' }
                   const isActive = room.status === 'active'
+                  const isSolo = room.status === 'solo'
                   const ago = timeAgo(room.updated_at)
+                  const accentColor = isActive ? '#5fd99a' : isSolo ? '#d9b65a' : '#8ab4f8'
                   return (
                     <div key={room.code} style={{
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                       padding: '16px 20px', borderRadius: 12,
-                      background: isActive ? 'rgba(95,217,154,.05)' : 'rgba(0,0,0,.3)',
-                      border: isActive ? '1px solid rgba(95,217,154,.25)' : '1px solid rgba(217,182,90,.12)',
+                      background: isActive ? 'rgba(95,217,154,.05)' : isSolo ? 'rgba(217,182,90,.04)' : 'rgba(0,0,0,.3)',
+                      border: `1px solid ${isActive ? 'rgba(95,217,154,.25)' : isSolo ? 'rgba(217,182,90,.18)' : 'rgba(217,182,90,.12)'}`,
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                         <div style={{
                           width: 44, height: 44, borderRadius: 10, flexShrink: 0,
-                          background: isActive ? 'rgba(95,217,154,.12)' : 'rgba(217,182,90,.08)',
-                          border: isActive ? '1px solid rgba(95,217,154,.3)' : '1px solid rgba(217,182,90,.2)',
+                          background: `${accentColor}18`,
+                          border: `1px solid ${accentColor}40`,
                           display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20,
                         }}>
                           {ICONS[room.game] || '🎲'}
@@ -785,17 +787,19 @@ export default function AdminPage() {
                             <span style={{
                               fontSize: 10, letterSpacing: '.1em', textTransform: 'uppercase',
                               padding: '2px 8px', borderRadius: 999, fontFamily: 'var(--fs-head)',
-                              background: isActive ? 'rgba(95,217,154,.15)' : 'rgba(217,182,90,.1)',
-                              color: isActive ? '#5fd99a' : 'var(--gold-l)',
-                              border: isActive ? '1px solid rgba(95,217,154,.3)' : '1px solid rgba(217,182,90,.2)',
+                              background: `${accentColor}20`,
+                              color: accentColor,
+                              border: `1px solid ${accentColor}50`,
                             }}>
-                              {isActive ? '● Active' : '⏳ Waiting'}
+                              {isActive ? '● Active' : isSolo ? '● Solo' : '⏳ Waiting'}
                             </span>
                           </div>
                           <div style={{ fontSize: 13, color: 'var(--cream-dim)' }}>
-                            <span style={{ color: 'var(--cream)' }}>{room.host_name}</span>
-                            {room.guest_name
+                            <span style={{ color: 'var(--cream)' }}>{room.host_name || 'Unknown'}</span>
+                            {isActive && room.guest_name
                               ? <> vs <span style={{ color: 'var(--cream)' }}>{room.guest_name}</span></>
+                              : isSolo
+                              ? <span style={{ color: 'var(--cream-faint)' }}> · playing solo vs bots</span>
                               : <span style={{ color: 'var(--cream-faint)' }}> · waiting for opponent</span>}
                           </div>
                           <div style={{ fontSize: 11, color: 'var(--cream-faint)', marginTop: 2, fontFamily: 'var(--fs-head)', letterSpacing: '.05em' }}>
@@ -811,7 +815,7 @@ export default function AdminPage() {
                           borderRadius: 999, textDecoration: 'none', flexShrink: 0,
                           fontFamily: 'var(--fs-head)', fontSize: 12, letterSpacing: '.1em',
                           textTransform: 'uppercase', fontWeight: 700,
-                          background: isActive ? 'rgba(217,182,90,.15)' : 'rgba(217,182,90,.06)',
+                          background: 'rgba(217,182,90,.12)',
                           border: '1px solid rgba(217,182,90,.3)', color: 'var(--gold-l)',
                           transition: '.2s',
                         }}
@@ -825,7 +829,7 @@ export default function AdminPage() {
             )}
 
             <div style={{ marginTop: 20, padding: '14px 16px', borderRadius: 10, background: 'rgba(0,0,0,.3)', border: '1px solid rgba(217,182,90,.1)', fontSize: 12, color: 'var(--cream-faint)', lineHeight: 1.6 }}>
-              <strong style={{ color: 'var(--cream-dim)' }}>Note:</strong> Games appear here once a host generates an invite code.
+              <strong style={{ color: 'var(--cream-dim)' }}>Note:</strong> All active games appear here automatically — solo games vs bots, waiting rooms, and live multiplayer matches.
               Spectating opens the game in a new tab with all cards visible and no action buttons.
               The{' '}<code style={{ fontFamily: 'monospace', background: 'rgba(255,255,255,.05)', padding: '1px 5px', borderRadius: 4 }}>game_rooms</code> table must exist in Supabase — see schema.sql.
             </div>

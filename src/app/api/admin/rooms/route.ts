@@ -16,7 +16,7 @@ export async function GET() {
     const { data: rooms } = await admin
       .from('game_rooms')
       .select('*')
-      .in('status', ['waiting', 'active'])
+      .in('status', ['waiting', 'active', 'solo'])
       .gte('updated_at', cutoff)
       .order('updated_at', { ascending: false })
     return NextResponse.json({ rooms: rooms || [] })

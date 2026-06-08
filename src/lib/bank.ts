@@ -60,6 +60,7 @@ export async function logGameSession(
       .update({
         total_wagered: (profile.total_wagered || 0) + chipsWagered,
         total_won: (profile.total_won || 0) + chipsWon,
+        last_login: new Date().toISOString(),
       })
       .eq('id', userId)
   }

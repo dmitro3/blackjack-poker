@@ -121,8 +121,9 @@ export default function RoulettePage() {
     const target = 360*6 - idx*SEG - rotRef.current%360
     rotRef.current += target
     if (wheelRef.current) wheelRef.current.style.transform = `rotate(${rotRef.current}deg)`
+    const ballR = Math.round((wheelRef.current?.offsetWidth ?? 304) * 0.434)
     if (ballRef.current) ballRef.current.style.transform =
-      `rotate(${-360*9 - rotRef.current}deg) translate(0, -132px) rotate(${360*9 + rotRef.current}deg)`
+      `rotate(${-360*9 - rotRef.current}deg) translate(0, -${ballR}px) rotate(${360*9 + rotRef.current}deg)`
 
     setTimeout(async () => {
       let winnings = 0
@@ -204,7 +205,11 @@ export default function RoulettePage() {
 
       <div className="stage">
         <div className="wheel-side">
-          <div className="wheel-housing">
+          <div className="wheel-housing" onClick={() => {
+            if (spinning) return
+            if (total === 0) { showToast('Place a bet first', ''); return }
+            spin()
+          }}>
             <div className="pointer" />
             <div className="wheel-rim" />
             <div className="wheel" ref={wheelRef}>
@@ -222,6 +227,7 @@ export default function RoulettePage() {
             </div>
             <div className="hub" />
             <div className="ball" ref={ballRef} />
+            {!spinning && <div className="tap-spin-hint" aria-hidden="true">{total > 0 ? 'TAP' : 'BET'}</div>}
           </div>
           <div className="result-disp">
             {win ? (
@@ -254,7 +260,7 @@ export default function RoulettePage() {
                     ))}
                   </div>
                 </div>
-                <div className="lower" style={{marginRight:46}}>
+                <div className="lower">
                   <div className="dozens">
                     <div className="cell" onClick={() => place('dozen-1')}>1st 12<Chip k="dozen-1"/></div>
                     <div className="cell" onClick={() => place('dozen-2')}>2nd 12<Chip k="dozen-2"/></div>
@@ -334,7 +340,8 @@ export default function RoulettePage() {
 
       <style>{`
         html, body { height: 100%; overflow: hidden; }
-        .table-wrap { height: 100vh; display: flex; flex-direction: column; }
+        .table-wrap { height: 100vh; height: 100svh; display: flex; flex-direction: column; }
+        .tap-spin-hint { display: none; }
         .topbar { display:flex;align-items:center;justify-content:space-between;padding:14px 24px;z-index:30;background:linear-gradient(180deg, rgba(11,10,7,.95), rgba(11,10,7,.2)); }
         .back { display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--cream-dim);font-family:var(--fs-head);font-size:13px;letter-spacing:.12em;text-transform:uppercase;padding:9px 16px;border-radius:999px;border:1px solid rgba(217,182,90,.25);transition:.2s; }
         .back:hover { color:var(--gold-l);border-color:var(--gold); }
@@ -369,7 +376,7 @@ export default function RoulettePage() {
         .numbers .cell { font-size:14px; }
         .colbets { display:grid;grid-template-rows:repeat(3,41px);width:46px; }
         .colbets .cell { font-size:12px;background:linear-gradient(160deg,#1b1810,#0b0a07);border-radius:0 8px 8px 0; }
-        .lower { margin-left:42px; }
+        .lower { margin-left:42px; margin-right:46px; }
         .dozens { display:grid;grid-template-columns:repeat(3,1fr); }
         .outside { display:grid;grid-template-columns:repeat(6,1fr);margin-top:0; }
         .lower .cell { height:38px;font-size:12px;letter-spacing:.06em;background:linear-gradient(160deg,#1b1810,#0b0a07); }
@@ -391,20 +398,137 @@ export default function RoulettePage() {
         .invite-field input { flex:1;background:rgba(0,0,0,.4);border:1px solid rgba(217,182,90,.3);border-radius:10px;padding:0 14px;color:var(--gold-l);font-size:13px;height:46px; }
         .modal .x { position:absolute;top:16px;right:18px;background:none;border:none;color:var(--cream-faint);font-size:24px;cursor:pointer;line-height:1; }
         .seatnote { margin-top:18px;font-size:12px;color:var(--cream-faint);line-height:1.5;border-top:1px solid rgba(217,182,90,.15);padding-top:14px; }
+        @keyframes tapPulse {
+          0%,100% { transform: translate(-50%,-50%) scale(1); opacity: .75; }
+          50% { transform: translate(-50%,-50%) scale(1.2); opacity: 1; }
+        }
         @media (max-width: 640px) {
-          .topbar { padding: 10px 14px !important; }
-          .topbar .title-c .t { font-size: 16px !important; }
-          .topbar .title-c .s { display: none; }
-          .topbar .right { gap: 6px !important; flex-wrap: wrap; justify-content: flex-end; }
-          .stage { grid-template-columns: 1fr !important; gap: 0 !important; padding: 8px !important; overflow-y: auto; }
-          .wheel-side { padding-bottom: 8px !important; }
-          .wheel-housing { width: 240px !important; height: 240px !important; }
-          .board { min-width: unset !important; width: 100% !important; overflow-x: auto; }
-          .board-side { padding: 0 8px 8px !important; }
-          .numbers { grid-template-rows: repeat(3, 32px) !important; }
-          .lower .cell { height: 30px !important; font-size: 9px !important; }
-          .cell { font-size: 10px !important; }
-          .table-wrap { height: auto !important; min-height: 100vh; overflow-y: auto; }
+          html, body { overflow: hidden !important; }
+          .table-wrap { height: 100svh !important; overflow: hidden !important; }
+
+          .topbar { padding: 8px 12px !important; }
+          .topbar .title-c .t { font-size: 15px !important; }
+          .topbar .title-c .s { display: none !important; }
+          .topbar .right > .btn:nth-child(1),
+          .topbar .right > .btn:nth-child(2) { display: none !important; }
+
+          .stage {
+            display: flex !important;
+            flex-direction: column !important;
+            grid-template-columns: unset !important;
+            gap: 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            border-radius: 0 !important;
+            border-left: none !important;
+            border-right: none !important;
+            border-bottom: none !important;
+            overflow: hidden !important;
+            min-height: 0 !important;
+          }
+
+          .wheel-side {
+            flex-direction: row !important;
+            align-items: center !important;
+            justify-content: flex-start !important;
+            gap: 14px !important;
+            padding: 10px 14px !important;
+            flex-shrink: 0 !important;
+            border-bottom: 1px solid rgba(217,182,90,.18) !important;
+          }
+
+          .wheel-housing {
+            width: 148px !important;
+            height: 148px !important;
+            flex-shrink: 0 !important;
+            cursor: pointer !important;
+          }
+          .wheel { inset: 7px !important; }
+          .pointer {
+            border-left-width: 8px !important;
+            border-right-width: 8px !important;
+            border-top-width: 14px !important;
+            top: -4px !important;
+          }
+          .wheel-rim {
+            box-shadow: 0 8px 20px rgba(0,0,0,.6),
+              inset 0 0 0 5px var(--gold-d),
+              inset 0 0 0 10px #1a130a !important;
+          }
+          .pocket { width: 10px !important; margin-left: -5px !important; }
+          .pocket .num { font-size: 5px !important; padding-top: 3px !important; }
+
+          .tap-spin-hint {
+            display: flex !important;
+            position: absolute !important;
+            top: 50% !important; left: 50% !important;
+            transform: translate(-50%,-50%) !important;
+            width: 32% !important;
+            aspect-ratio: 1 !important;
+            border-radius: 50% !important;
+            z-index: 10 !important;
+            background: rgba(217,182,90,.35) !important;
+            align-items: center !important;
+            justify-content: center !important;
+            font-family: var(--fs-head) !important;
+            font-size: 9px !important;
+            font-weight: 800 !important;
+            letter-spacing: .1em !important;
+            color: #fff !important;
+            pointer-events: none !important;
+            animation: tapPulse 1.5s ease-in-out infinite !important;
+          }
+
+          .result-disp {
+            flex: 1 !important;
+            min-height: unset !important;
+            align-items: flex-start !important;
+            justify-content: center !important;
+            gap: 6px !important;
+          }
+          .result-num { width: 50px !important; height: 50px !important; font-size: 22px !important; }
+          .result-net { font-size: 13px !important; }
+
+          .board-side {
+            flex: 1 !important;
+            min-height: 0 !important;
+            overflow-y: auto !important;
+            padding: 8px 8px 0 !important;
+            border-radius: 0 !important;
+            border: none !important;
+            background: transparent !important;
+            backdrop-filter: none !important;
+            gap: 0 !important;
+          }
+          .board-scroll { overflow-x: hidden !important; padding-bottom: 4px !important; }
+          .board { min-width: unset !important; width: 100% !important; }
+          .zero { width: 22px !important; font-size: 10px !important; }
+          .numbers {
+            grid-template-columns: repeat(12, 1fr) !important;
+            grid-template-rows: repeat(3, 32px) !important;
+          }
+          .numbers .cell { font-size: 9px !important; }
+          .colbets { width: 26px !important; }
+          .colbets .cell { font-size: 7px !important; }
+          .lower { margin-left: 22px !important; margin-right: 26px !important; }
+          .lower .cell { height: 26px !important; font-size: 8px !important; letter-spacing: 0 !important; }
+          .placed { width: 22px !important; height: 22px !important; font-size: 8px !important; }
+
+          .ctrl {
+            flex-direction: column !important;
+            gap: 8px !important;
+            padding: 8px 12px 16px !important;
+            flex-shrink: 0 !important;
+            border-top: 1px solid rgba(217,182,90,.2) !important;
+            background: linear-gradient(0deg, rgba(7,5,2,.97), rgba(7,5,2,.6)) !important;
+          }
+          .chip-sel { gap: 8px !important; justify-content: center !important; }
+          .chip-sel .chip { width: 46px !important; height: 46px !important; font-size: 11px !important; }
+          .chip-sel .chip.sel { transform: translateY(-3px) !important; outline-width: 2px !important; }
+          .ctrl-right { width: 100% !important; justify-content: space-between !important; gap: 8px !important; }
+          .ctrl-right .btn { flex: 1 !important; min-width: 0 !important; font-size: 14px !important; padding: 12px 0 !important; }
+          .total-bet { font-size: 12px !important; white-space: nowrap; }
+          .total-bet b { font-size: 14px !important; }
         }
       `}</style>
     </div>
