@@ -75,9 +75,13 @@ export default function RoulettePage() {
   const [inviteCode, setInviteCode] = useState('')
   const [loading, setLoading] = useState(true)
   const [muted, setMutedUI] = useState(false)
+  const [isSpectator, setIsSpectator] = useState(false)
   const wheelRef = useRef<HTMLDivElement>(null)
   const ballRef = useRef<HTMLDivElement>(null)
   const rotRef = useRef(0)
+  const roomCodeRef = useRef('')
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  const isSpectatorRef = useRef(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -94,13 +98,39 @@ export default function RoulettePage() {
       } catch {}
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
-      const { data: profile } = await supabase.from('profiles').select('chips').eq('id', user.id).single()
-      if (profile) {
-        setBal(profile.chips)
+
+      const params = new URLSearchParams(window.location.search)
+      const sc = params.get('spectate')
+
+      if (sc) {
+        isSpectatorRef.current = true
+        setIsSpectator(true)
+        const ch = supabase.channel(`ht-game-${sc.toUpperCase()}`)
+        ch.on('broadcast', { event: 'SPIN_START' }, () => { setSpinning(true); setWin(null) })
+          .on('broadcast', { event: 'SPIN_END' }, ({ payload }) => {
+            const { num, net } = payload as { num: number; net: number }
+            setWin({ num, net }); setSpinning(false)
+          })
+          .subscribe(status => {
+            if (status === 'SUBSCRIBED') ch.send({ type: 'broadcast', event: 'SPECTATOR_JOIN', payload: {} }).catch(() => {})
+          })
+        channelRef.current = ch
+      } else {
+        const { data: profile } = await supabase.from('profiles').select('chips').eq('id', user.id).single()
+        if (profile) setBal(profile.chips)
+        const code = generateCode('roulette')
+        roomCodeRef.current = code
+        fetch('/api/game/room', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, game: 'roulette', status: 'solo' }) }).catch(() => {})
+        const ch = supabase.channel(`ht-game-${code}`, { config: { broadcast: { self: false } } })
+        ch.on('broadcast', { event: 'SPECTATOR_JOIN' }, () => {
+          if (channelRef.current) channelRef.current.send({ type: 'broadcast', event: 'SPIN_END', payload: {} }).catch(() => {})
+        }).subscribe()
+        channelRef.current = ch
       }
       setLoading(false)
     }
     init()
+    return () => { channelRef.current?.unsubscribe() }
   }, [router])
 
   function showToast(msg: string, kind = '') { setToast({ msg, kind }) }
@@ -150,7 +180,9 @@ export default function RoulettePage() {
 
   async function spin() {
     if (spinning || total === 0) return
+    if (isSpectatorRef.current) return
     setSpinning(true); setWin(null)
+    channelRef.current?.send({ type: 'broadcast', event: 'SPIN_START', payload: {} }).catch(() => {})
     startTension()
     const idx = Math.floor(Math.random() * WHEEL.length)
     const w = WHEEL[idx]
@@ -175,6 +207,8 @@ export default function RoulettePage() {
       const label = w===0?'Zero':(colOf(w)==='red'?'Red ':'Black ')+w
       showToast(label+(net>0?'  +'+fmt(net):net<0?'  −'+fmt(wagered):''), net>0?'win':(net<0?'lose':''))
       setBets({})
+
+      channelRef.current?.send({ type: 'broadcast', event: 'SPIN_END', payload: { num: w, net } }).catch(() => {})
 
       if (net >= 1_000_000) {
         try { localStorage.setItem('roulette_ban_until', String(Date.now() + 10 * 60 * 1000)) } catch {}
@@ -250,7 +284,13 @@ export default function RoulettePage() {
         </div>
       </header>
 
-      <div className="stage">
+      {isSpectator && (
+        <div style={{ background:'rgba(217,182,90,.12)', border:'1px solid rgba(217,182,90,.35)', borderRadius:999, padding:'7px 20px', textAlign:'center', margin:'0 22px', fontFamily:'var(--fs-head)', fontSize:12, letterSpacing:'.12em', color:'var(--gold-l)', textTransform:'uppercase' }}>
+          👁 Spectating Live — Read Only
+        </div>
+      )}
+
+      <div className="stage" style={isSpectator ? { pointerEvents: 'none' } : undefined}>
         <div className="wheel-side">
           <div className="wheel-housing" onClick={() => {
             if (spinning) return
@@ -564,7 +604,7 @@ export default function RoulettePage() {
 
           /* Controls: pinned at bottom */
           .ctrl { flex-shrink:0 !important; flex-direction:column !important; gap:8px !important; padding:8px 12px 20px !important; border-top:1px solid rgba(217,182,90,.2) !important; background:linear-gradient(0deg,rgba(7,5,2,.97),rgba(7,5,2,.5)) !important; }
-          .chip-sel { gap:8px !important; justify-content:center !important; }
+          .chip-sel { gap:8px !important; justify-content:center !important; flex-wrap:wrap !important; }
           .chip-sel .chip { width:46px !important; height:46px !important; font-size:11px !important; }
           .chip-sel .chip.sel { transform:translateY(-3px) !important; outline-width:2px !important; }
           .ctrl-right { width:100% !important; justify-content:space-between !important; gap:8px !important; }

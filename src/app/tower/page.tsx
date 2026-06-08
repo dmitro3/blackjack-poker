@@ -17,6 +17,18 @@ const FLOORS = [
 ]
 const BET_OPTIONS = [1000, 5000, 10000, 25000, 50000]
 
+// Safe card faces per floor (cycling through nice hands)
+const SAFE_CARDS = [
+  { rank: 'A', suit: '♠', red: false },
+  { rank: 'K', suit: '♥', red: true },
+  { rank: 'Q', suit: '♦', red: true },
+  { rank: 'J', suit: '♠', red: false },
+  { rank: 'A', suit: '♦', red: true },
+  { rank: 'K', suit: '♠', red: false },
+  { rank: 'A', suit: '♥', red: true },
+  { rank: 'A', suit: '♣', red: false },
+]
+
 function fmt(n: number) { return Number(n).toLocaleString('en-US') }
 function mLabel(m: number) { return m >= 10 ? m + '×' : m.toFixed(1) + '×' }
 
@@ -34,17 +46,64 @@ function genBombs(): number[][] {
 
 type Phase = 'idle' | 'playing' | 'dead' | 'won'
 
-// Floor color theme: bottom (purple) → middle (deep violet) → top (gold)
-const FLOOR_THEME = [
-  { tile: 'rgba(109,40,217,.18)', active: 'rgba(124,58,237,.4)', border: 'rgba(167,139,250,.25)' },
-  { tile: 'rgba(109,40,217,.2)', active: 'rgba(124,58,237,.45)', border: 'rgba(167,139,250,.28)' },
-  { tile: 'rgba(88,28,221,.22)', active: 'rgba(109,40,217,.5)', border: 'rgba(167,139,250,.3)' },
-  { tile: 'rgba(79,20,210,.25)', active: 'rgba(109,40,217,.55)', border: 'rgba(192,132,252,.32)' },
-  { tile: 'rgba(150,30,120,.2)', active: 'rgba(180,40,140,.45)', border: 'rgba(232,121,249,.3)' },
-  { tile: 'rgba(180,30,80,.2)', active: 'rgba(220,50,90,.4)', border: 'rgba(249,99,119,.3)' },
-  { tile: 'rgba(200,60,20,.18)', active: 'rgba(234,88,12,.4)', border: 'rgba(251,146,60,.3)' },
-  { tile: 'rgba(180,120,10,.18)', active: 'rgba(217,182,90,.35)', border: 'rgba(217,182,90,.4)' },
-]
+function TileCard({ state, onClick, floorIdx }: {
+  state: 'unknown' | 'active' | 'safe' | 'bomb' | 'reveal-bomb' | 'reveal-safe'
+  onClick?: () => void
+  floorIdx: number
+}) {
+  const safe = SAFE_CARDS[floorIdx % SAFE_CARDS.length]
+  const w = 54
+
+  if (state === 'unknown') {
+    return (
+      <div className="card back" style={{ '--w': w + 'px', opacity: 0.35, cursor: 'default' } as React.CSSProperties} />
+    )
+  }
+  if (state === 'active') {
+    return (
+      <div
+        className="card back"
+        onClick={onClick}
+        style={{ '--w': w + 'px', cursor: 'pointer', boxShadow: '0 0 0 2px var(--gold-l), 0 0 22px rgba(217,182,90,.6), 0 6px 16px rgba(0,0,0,.5)', transform: 'translateY(-4px)', transition: 'all .15s' } as React.CSSProperties}
+      />
+    )
+  }
+  if (state === 'safe') {
+    return (
+      <div className={'card' + (safe.red ? ' red' : '')} style={{ '--w': w + 'px', boxShadow: '0 0 14px rgba(95,217,154,.4), 0 6px 16px rgba(0,0,0,.45)' } as React.CSSProperties}>
+        <div className="pip-tl"><div className="rank">{safe.rank}</div><div className="pip-suit">{safe.suit}</div></div>
+        <div className="center-suit">{safe.suit}</div>
+        <div className="pip-br"><div className="rank">{safe.rank}</div><div className="pip-suit">{safe.suit}</div></div>
+      </div>
+    )
+  }
+  if (state === 'bomb') {
+    return (
+      <div className="card" style={{ '--w': w + 'px', background: 'linear-gradient(160deg,#3a0808,#1a0404)', color: '#ef4444', boxShadow: '0 0 18px rgba(239,68,68,.5), 0 6px 16px rgba(0,0,0,.5)' } as React.CSSProperties}>
+        <div className="pip-tl"><div className="rank">💀</div></div>
+        <div className="center-suit" style={{ fontSize: w * 0.4 }}>💀</div>
+        <div className="pip-br"><div className="rank">💀</div></div>
+      </div>
+    )
+  }
+  if (state === 'reveal-bomb') {
+    return (
+      <div className="card" style={{ '--w': w + 'px', background: 'linear-gradient(160deg,#2a0606,#140303)', opacity: 0.75, color: '#ef4444', boxShadow: '0 0 10px rgba(239,68,68,.25)' } as React.CSSProperties}>
+        <div className="pip-tl"><div className="rank">💣</div></div>
+        <div className="center-suit" style={{ fontSize: w * 0.38 }}>💣</div>
+        <div className="pip-br"><div className="rank">💣</div></div>
+      </div>
+    )
+  }
+  // reveal-safe
+  return (
+    <div className={'card' + (safe.red ? ' red' : '')} style={{ '--w': w + 'px', opacity: 0.65 } as React.CSSProperties}>
+      <div className="pip-tl"><div className="rank">{safe.rank}</div><div className="pip-suit">{safe.suit}</div></div>
+      <div className="center-suit">{safe.suit}</div>
+      <div className="pip-br"><div className="rank">{safe.rank}</div><div className="pip-suit">{safe.suit}</div></div>
+    </div>
+  )
+}
 
 export default function TowerPage() {
   const [bal, setBal] = useState(100000)
@@ -132,8 +191,8 @@ export default function TowerPage() {
   }
 
   if (loading) return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#06021a' }}>
-      <div style={{ color: '#c4b5fd', fontFamily: 'var(--fs-head)', letterSpacing: '.1em' }}>Loading…</div>
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ color: 'var(--gold-l)', fontFamily: 'var(--fs-head)', letterSpacing: '.1em' }}>Loading…</div>
     </div>
   )
 
@@ -141,179 +200,124 @@ export default function TowerPage() {
   const displayOrder = [7, 6, 5, 4, 3, 2, 1, 0]
 
   return (
-    <div style={{ minHeight: '100vh', background: 'linear-gradient(180deg, #06021a 0%, #0b0428 50%, #130836 100%)', display: 'flex', flexDirection: 'column', color: 'var(--cream)' }}>
-      {/* Ambient stars */}
-      <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0, overflow: 'hidden' }}>
-        {[...Array(24)].map((_, i) => (
-          <div key={i} style={{
-            position: 'absolute', borderRadius: '50%', background: '#c4b5fd',
-            width: 2, height: 2, opacity: 0.12 + (i % 5) * 0.06,
-            left: (i * 17 + 3) % 97 + '%',
-            top: (i * 11 + 7) % 93 + '%',
-            animation: `twinkle ${2 + (i % 4) * 0.7}s ease-in-out ${(i * 0.4) % 2}s infinite alternate`,
-          }} />
-        ))}
-      </div>
+    <div className="twr-wrap">
 
       {/* Header */}
-      <header style={{ position: 'sticky', top: 0, zIndex: 40, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 24px', background: 'rgba(6,2,26,.92)', backdropFilter: 'blur(8px)', borderBottom: '1px solid rgba(167,139,250,.15)' }}>
-        <Link href="/" style={{ color: 'var(--cream-dim)', fontFamily: 'var(--fs-head)', fontSize: 13, letterSpacing: '.12em', textTransform: 'uppercase', padding: '9px 16px', borderRadius: 999, border: '1px solid rgba(167,139,250,.25)', textDecoration: 'none' }}>← Lobby</Link>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontFamily: 'var(--fs-display)', fontWeight: 900, fontSize: 20, letterSpacing: '.12em', background: 'linear-gradient(135deg, #f5f0ff, #c4b5fd, #a78bfa)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-            TOWER OF CHANCE
-          </div>
-          <div style={{ fontFamily: 'var(--fs-head)', fontSize: 9, letterSpacing: '.4em', color: 'rgba(167,139,250,.45)' }}>CLIMB · RISK · CLAIM</div>
+      <header className="topbar">
+        <Link className="back" href="/">← Lobby</Link>
+        <div className="title-c">
+          <div className="t gold-text">TOWER OF CHANCE</div>
+          <div className="s">CLIMB · RISK · CLAIM · 300× MAX</div>
         </div>
-        <div className="balance">
-          <div className="coin">H</div>
-          <span className="amt tabnum">{fmt(bal)}</span>
+        <div className="right">
+          <div className="balance">
+            <div className="coin">H</div>
+            <span className="amt tabnum">{fmt(bal)}</span>
+          </div>
         </div>
       </header>
 
-      {/* Body */}
-      <div style={{ flex: 1, display: 'flex', gap: 22, padding: '24px 24px', maxWidth: 860, margin: '0 auto', width: '100%', boxSizing: 'border-box', position: 'relative', zIndex: 1 }}>
+      {/* Main stage */}
+      <div className="twr-stage">
 
-        {/* Tower */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {/* Tower column */}
+        <div className="twr-tower">
           {displayOrder.map(fi => {
-            const theme = FLOOR_THEME[fi]
-            const { mult, bombs: bombCount } = FLOORS[fi]
+            const { mult } = FLOORS[fi]
             const isActive = phase === 'playing' && fi === floor
-            const isCleared = (picks[fi] !== null) && !bombMap[fi]?.includes(picks[fi] as number)
             const isDeadFloor = phase === 'dead' && fi === floor
-            const isUpcoming = phase === 'playing' && fi > floor
-            const isUnvisited = (phase === 'idle') || isUpcoming || (phase === 'dead' && fi > floor)
 
             return (
-              <div key={fi} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                {/* Multiplier label */}
-                <div style={{
-                  width: 48, textAlign: 'right', flexShrink: 0,
-                  fontFamily: 'var(--fs-head)', fontSize: 13, fontWeight: 700,
-                  color: isActive ? '#d9b65a'
-                    : isCleared ? (fi >= 4 ? '#fbbf24' : '#a78bfa')
-                    : 'rgba(167,139,250,.25)',
+              <div key={fi} className="twr-floor">
+                {/* Multiplier */}
+                <div className="twr-mult" style={{
+                  color: isActive ? 'var(--gold-l)'
+                    : (picks[fi] !== null && !bombMap[fi]?.includes(picks[fi] as number)) ? '#5fd99a'
+                    : 'rgba(217,182,90,.3)',
                 }}>
                   {mLabel(mult)}
                 </div>
 
-                {/* 3 Tiles */}
-                {[0, 1, 2].map(ti => {
-                  const pickedThis = picks[fi] === ti
-                  const hasBomb = bombMap.length > 0 && bombMap[fi].includes(ti)
+                {/* Cards */}
+                <div className="twr-cards">
+                  {[0, 1, 2].map(ti => {
+                    const pickedThis = picks[fi] === ti
+                    const hasBomb = bombMap.length > 0 && bombMap[fi].includes(ti)
+                    const isUpcoming = (phase === 'idle') || (phase === 'playing' && fi > floor) || (phase === 'dead' && fi > floor)
 
-                  let bg = theme.tile
-                  let border = `1px solid ${theme.border}`
-                  let shadow = 'none'
-                  let cursor = 'default'
-                  let content: React.ReactNode = null
-                  let opacity = 1
+                    let state: 'unknown' | 'active' | 'safe' | 'bomb' | 'reveal-bomb' | 'reveal-safe' = 'unknown'
 
-                  if (isUnvisited) {
-                    opacity = fi === floor && phase === 'idle' ? 0.45 : 0.25
-                    content = fi === 7
-                      ? <span style={{ fontSize: 14, opacity: .5 }}>👑</span>
-                      : <span style={{ fontSize: 9, color: 'rgba(167,139,250,.2)' }}>✦</span>
-                  } else if (isActive) {
-                    bg = theme.active
-                    border = `1px solid rgba(167,139,250,.6)`
-                    shadow = `0 0 18px rgba(124,58,237,.35), inset 0 0 12px rgba(167,139,250,.08)`
-                    cursor = 'pointer'
-                    content = <span style={{ fontSize: 22, filter: 'drop-shadow(0 0 6px rgba(196,181,253,.8))', userSelect: 'none' }}>⬡</span>
-                  } else if (pickedThis && !hasBomb) {
-                    // Safely picked
-                    bg = 'rgba(5,150,105,.22)'
-                    border = '1px solid rgba(52,211,153,.45)'
-                    shadow = '0 0 14px rgba(52,211,153,.25)'
-                    content = <span style={{ fontSize: 20 }}>💎</span>
-                  } else if (pickedThis && hasBomb) {
-                    // Hit a bomb
-                    bg = 'rgba(185,28,28,.3)'
-                    border = '1px solid rgba(239,68,68,.55)'
-                    shadow = '0 0 16px rgba(239,68,68,.4)'
-                    content = <span style={{ fontSize: 20 }}>💀</span>
-                  } else if (isDeadFloor && hasBomb) {
-                    // Reveal other bombs on death floor
-                    bg = 'rgba(120,20,20,.2)'
-                    border = '1px solid rgba(239,68,68,.25)'
-                    opacity = 0.7
-                    content = <span style={{ fontSize: 16 }}>💣</span>
-                  } else if (isDeadFloor && !hasBomb) {
-                    // Reveal safe tiles on death floor
-                    bg = 'rgba(5,90,60,.15)'
-                    border = '1px solid rgba(52,211,153,.2)'
-                    opacity = 0.6
-                    content = <span style={{ fontSize: 15 }}>💎</span>
-                  } else if (!isActive && !isUnvisited) {
-                    // Cleared floor, non-picked tile
-                    opacity = 0.3
-                    content = <span style={{ fontSize: 9, color: 'rgba(167,139,250,.15)' }}>✦</span>
-                  }
+                    if (isUpcoming) {
+                      state = 'unknown'
+                    } else if (isActive) {
+                      state = 'active'
+                    } else if (pickedThis && !hasBomb) {
+                      state = 'safe'
+                    } else if (pickedThis && hasBomb) {
+                      state = 'bomb'
+                    } else if (isDeadFloor && hasBomb) {
+                      state = 'reveal-bomb'
+                    } else if (isDeadFloor && !hasBomb) {
+                      state = 'reveal-safe'
+                    } else {
+                      // Cleared floor, non-picked tile
+                      state = 'unknown'
+                    }
 
-                  return (
-                    <div
-                      key={ti}
-                      onClick={() => isActive ? pickTile(ti) : undefined}
-                      style={{
-                        flex: 1, height: 52, borderRadius: 10,
-                        background: bg, border, boxShadow: shadow,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        cursor, opacity, transition: 'all .15s',
-                        userSelect: 'none',
-                      }}
-                    />
-                  )
-                })}
+                    return (
+                      <TileCard
+                        key={ti}
+                        state={state}
+                        onClick={isActive ? () => pickTile(ti) : undefined}
+                        floorIdx={fi}
+                      />
+                    )
+                  })}
+                </div>
 
                 {/* Floor indicator */}
-                <div style={{ width: 20, flexShrink: 0, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                  {isActive && <span style={{ color: '#a78bfa', fontSize: 14, animation: 'arrowPulse 1s ease-in-out infinite alternate' }}>▶</span>}
-                  {isCleared && <span style={{ color: '#34d399', fontSize: 13 }}>✓</span>}
-                  {isDeadFloor && <span style={{ color: '#ef4444', fontSize: 13 }}>✗</span>}
+                <div className="twr-indicator">
+                  {isActive && <span style={{ color: 'var(--gold-l)', fontSize: 14, animation: 'arrowPulse 1s ease-in-out infinite alternate' }}>▶</span>}
+                  {picks[fi] !== null && !bombMap[fi]?.includes(picks[fi] as number) && <span style={{ color: '#5fd99a', fontSize: 12 }}>✓</span>}
+                  {isDeadFloor && <span style={{ color: '#ef4444', fontSize: 12 }}>✗</span>}
                 </div>
               </div>
             )
           })}
 
-          {/* Tower base */}
-          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 4 }}>
-            <div style={{ height: 3, width: '70%', borderRadius: 999, background: 'linear-gradient(90deg, transparent, rgba(167,139,250,.3), transparent)' }} />
-          </div>
+          <div className="twr-base" />
         </div>
 
         {/* Controls */}
-        <div style={{ width: 240, display: 'flex', flexDirection: 'column', gap: 14, flexShrink: 0 }}>
-
-          {/* Difficulty card */}
-          <div style={{ padding: '14px 16px', borderRadius: 12, background: 'rgba(109,40,217,.12)', border: '1px solid rgba(167,139,250,.2)' }}>
-            <div style={{ fontSize: 9, letterSpacing: '.22em', color: 'rgba(167,139,250,.45)', textTransform: 'uppercase', fontFamily: 'var(--fs-head)', marginBottom: 10 }}>Danger guide</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                <span style={{ color: 'rgba(167,139,250,.65)' }}>Floors 1–4</span>
-                <span style={{ color: '#34d399', fontFamily: 'var(--fs-head)', fontWeight: 700, fontSize: 11 }}>1 of 3 cursed</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                <span style={{ color: 'rgba(167,139,250,.65)' }}>Floors 5–8</span>
-                <span style={{ color: '#ef4444', fontFamily: 'var(--fs-head)', fontWeight: 700, fontSize: 11 }}>2 of 3 cursed</span>
-              </div>
+        <div className="twr-ctrl">
+          {/* Danger guide */}
+          <div className="twr-guide">
+            <div className="twr-guide-title">Danger Guide</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+              <span style={{ color: 'var(--cream-faint)' }}>Floors 1–4</span>
+              <span style={{ color: '#5fd99a', fontWeight: 700 }}>1 of 3 cursed</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+              <span style={{ color: 'var(--cream-faint)' }}>Floors 5–8</span>
+              <span style={{ color: '#e7708a', fontWeight: 700 }}>2 of 3 cursed</span>
             </div>
           </div>
 
           {/* Bet selector */}
           {(phase === 'idle' || phase === 'dead' || phase === 'won') && (
             <div>
-              <div style={{ fontSize: 9, letterSpacing: '.22em', color: 'rgba(167,139,250,.45)', textTransform: 'uppercase', fontFamily: 'var(--fs-head)', marginBottom: 10 }}>Your bet</div>
+              <div className="twr-section-label">Your Bet</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {BET_OPTIONS.map(b => (
                   <button
                     key={b}
                     onClick={() => setBet(b)}
                     style={{
-                      padding: '7px 11px', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 11,
-                      border: bet === b ? '1px solid rgba(167,139,250,.7)' : '1px solid rgba(124,58,237,.2)',
-                      background: bet === b ? 'rgba(124,58,237,.35)' : 'rgba(20,10,45,.5)',
-                      color: bet === b ? '#c4b5fd' : 'rgba(167,139,250,.5)',
-                      fontFamily: 'var(--fs-head)', transition: '.15s',
+                      padding: '7px 12px', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 11,
+                      border: bet === b ? '1px solid var(--gold-l)' : '1px solid rgba(217,182,90,.2)',
+                      background: bet === b ? 'rgba(217,182,90,.15)' : 'rgba(0,0,0,.3)',
+                      color: bet === b ? 'var(--gold-l)' : 'var(--cream-faint)',
+                      fontFamily: 'var(--fs-head)',
                     }}
                   >
                     {b >= 1000 ? (b / 1000) + 'K' : b}
@@ -325,19 +329,19 @@ export default function TowerPage() {
 
           {/* Live payout info */}
           {phase === 'playing' && (
-            <div style={{ padding: '14px 16px', borderRadius: 12, background: 'rgba(0,0,0,.3)', border: '1px solid rgba(167,139,250,.15)' }}>
-              <div style={{ fontSize: 9, letterSpacing: '.22em', color: 'rgba(167,139,250,.45)', textTransform: 'uppercase', fontFamily: 'var(--fs-head)', marginBottom: 8 }}>Floor {floor + 1} reward</div>
-              <div style={{ fontFamily: 'var(--fs-display)', fontWeight: 900, fontSize: 30, color: FLOORS[floor].mult >= 10 ? '#fbbf24' : '#c4b5fd' }}>
+            <div className="twr-live">
+              <div className="twr-section-label">Floor {floor + 1} — If you clear it</div>
+              <div style={{ fontFamily: 'var(--fs-display)', fontWeight: 900, fontSize: 32, color: FLOORS[floor].mult >= 10 ? 'var(--gold-l)' : 'var(--cream)' }}>
                 {mLabel(FLOORS[floor].mult)}
               </div>
-              <div style={{ fontSize: 12, color: 'rgba(167,139,250,.5)', marginTop: 3, fontVariantNumeric: 'tabular-nums' }}>
-                = {fmt(Math.round(bet * FLOORS[floor].mult))}
+              <div style={{ fontSize: 13, color: 'var(--cream-faint)', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
+                = {fmt(Math.round(bet * FLOORS[floor].mult))} chips
               </div>
               {floor > 0 && (
                 <>
-                  <div style={{ height: 1, background: 'rgba(167,139,250,.1)', margin: '12px 0' }} />
-                  <div style={{ fontSize: 10, color: 'rgba(167,139,250,.45)', letterSpacing: '.1em', fontFamily: 'var(--fs-head)', textTransform: 'uppercase' }}>Safe to cash out</div>
-                  <div style={{ fontWeight: 700, color: '#a78bfa', fontSize: 20, fontVariantNumeric: 'tabular-nums', marginTop: 3 }}>
+                  <div style={{ height: 1, background: 'rgba(217,182,90,.15)', margin: '14px 0' }} />
+                  <div style={{ fontSize: 11, color: 'var(--cream-faint)', fontFamily: 'var(--fs-head)', letterSpacing: '.1em', textTransform: 'uppercase' }}>Safe to cash out now</div>
+                  <div style={{ fontWeight: 700, color: '#5fd99a', fontSize: 22, fontVariantNumeric: 'tabular-nums', marginTop: 4 }}>
                     {fmt(safePayoutNow)}
                   </div>
                 </>
@@ -345,15 +349,15 @@ export default function TowerPage() {
             </div>
           )}
 
-          {/* Result card */}
+          {/* Result */}
           {(phase === 'dead' || phase === 'won') && (
-            <div style={{ padding: '18px', borderRadius: 14, background: phase === 'won' ? 'rgba(5,150,105,.14)' : 'rgba(185,28,28,.12)', border: `1px solid ${phase === 'won' ? 'rgba(52,211,153,.35)' : 'rgba(239,68,68,.3)'}`, textAlign: 'center' }}>
-              <div style={{ fontSize: 30, marginBottom: 8 }}>{phase === 'won' ? '🏆' : '💥'}</div>
-              <div style={{ fontFamily: 'var(--fs-head)', fontWeight: 700, fontSize: 15, color: phase === 'won' ? '#34d399' : '#ef4444', marginBottom: 6 }}>
-                {phase === 'won' ? 'Cashed Out!' : 'Wiped Out'}
+            <div className="twr-result" style={{ background: phase === 'won' ? 'rgba(95,217,154,.1)' : 'rgba(185,28,28,.1)', borderColor: phase === 'won' ? 'rgba(95,217,154,.3)' : 'rgba(239,68,68,.25)' }}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>{phase === 'won' ? '🏆' : '💀'}</div>
+              <div style={{ fontFamily: 'var(--fs-head)', fontWeight: 700, fontSize: 16, color: phase === 'won' ? '#5fd99a' : '#ef4444', marginBottom: 6 }}>
+                {phase === 'won' ? 'Cashed Out!' : 'Eliminated'}
               </div>
               {phase === 'won' && (
-                <div style={{ fontFamily: 'var(--fs-display)', fontWeight: 900, fontSize: 26, color: '#d9b65a', fontVariantNumeric: 'tabular-nums' }}>
+                <div style={{ fontFamily: 'var(--fs-display)', fontWeight: 900, fontSize: 28, color: 'var(--gold-l)', fontVariantNumeric: 'tabular-nums' }}>
                   +{fmt(payout)}
                 </div>
               )}
@@ -361,51 +365,29 @@ export default function TowerPage() {
           )}
 
           {/* Start button */}
-          {(phase === 'idle') && (
+          {phase === 'idle' && (
             <button
               onClick={startGame}
               disabled={bet > bal}
-              style={{
-                padding: '15px 0', borderRadius: 12, border: 'none',
-                cursor: bet > bal ? 'not-allowed' : 'pointer',
-                background: bet > bal ? 'rgba(124,58,237,.15)' : 'linear-gradient(135deg, #7c3aed, #5b21b6)',
-                color: '#fff', fontFamily: 'var(--fs-head)', fontWeight: 700, fontSize: 14,
-                letterSpacing: '.1em', textTransform: 'uppercase',
-                boxShadow: bet > bal ? 'none' : '0 8px 28px rgba(109,40,217,.45)',
-                opacity: bet > bal ? 0.45 : 1, transition: '.2s',
-              }}
+              className="btn"
+              style={{ width: '100%', padding: '15px 0', fontSize: 14, opacity: bet > bal ? 0.4 : 1 }}
             >
-              Climb — {fmt(bet)}
+              Start Climb — {fmt(bet)}
             </button>
           )}
 
-          {/* Cash out */}
           {phase === 'playing' && floor > 0 && (
             <button
               onClick={cashOut}
-              style={{
-                padding: '13px 0', borderRadius: 12, cursor: 'pointer',
-                background: 'rgba(167,139,250,.14)', border: '1px solid rgba(167,139,250,.4)',
-                color: '#c4b5fd', fontFamily: 'var(--fs-head)', fontWeight: 700,
-                fontSize: 13, letterSpacing: '.08em', textTransform: 'uppercase', transition: '.2s',
-              }}
+              className="btn btn-ghost"
+              style={{ width: '100%', padding: '13px 0', fontSize: 13 }}
             >
               Cash Out {fmt(safePayoutNow)}
             </button>
           )}
 
-          {/* Play again */}
           {(phase === 'dead' || phase === 'won') && (
-            <button
-              onClick={reset}
-              style={{
-                padding: '14px 0', borderRadius: 12, border: 'none', cursor: 'pointer',
-                background: 'linear-gradient(135deg, #7c3aed, #5b21b6)',
-                color: '#fff', fontFamily: 'var(--fs-head)', fontWeight: 700,
-                fontSize: 14, letterSpacing: '.1em', textTransform: 'uppercase',
-                boxShadow: '0 6px 20px rgba(109,40,217,.4)', transition: '.2s',
-              }}
-            >
+            <button onClick={reset} className="btn" style={{ width: '100%', padding: '14px 0', fontSize: 14 }}>
               Play Again
             </button>
           )}
@@ -413,8 +395,32 @@ export default function TowerPage() {
       </div>
 
       <style>{`
-        @keyframes twinkle { from { opacity: .08; } to { opacity: .3; } }
-        @keyframes arrowPulse { from { opacity: .6; transform: translateX(0); } to { opacity: 1; transform: translateX(3px); } }
+        .twr-wrap { height:100vh;display:flex;flex-direction:column; }
+        .topbar { display:flex;align-items:center;justify-content:space-between;padding:14px 24px;z-index:30;background:linear-gradient(180deg,rgba(11,10,7,.95),rgba(11,10,7,.2)); }
+        .back { display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--cream-dim);font-family:var(--fs-head);font-size:13px;letter-spacing:.12em;text-transform:uppercase;padding:9px 16px;border-radius:999px;border:1px solid rgba(217,182,90,.25);transition:.2s; }
+        .back:hover { color:var(--gold-l);border-color:var(--gold); }
+        .title-c { text-align:center; }
+        .title-c .t { font-family:var(--fs-display);font-weight:900;font-size:20px;letter-spacing:.14em; }
+        .title-c .s { font-family:var(--fs-head);font-size:9px;letter-spacing:.4em;color:var(--cream-faint); }
+        .topbar .right { display:flex;align-items:center;gap:12px; }
+
+        .twr-stage { flex:1;display:grid;grid-template-columns:1fr 280px;gap:22px;padding:22px;min-height:0;margin:0 18px 18px;border-radius:30px;border:1px solid rgba(217,182,90,.3);background:radial-gradient(120% 100% at 50% 0%,#137a4a 0%,#0c5a37 38%,#073b25 100%);box-shadow:inset 0 0 140px rgba(0,0,0,.45),inset 0 2px 0 rgba(255,255,255,.05);overflow-y:auto; }
+
+        .twr-tower { display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:8px 0; }
+        .twr-floor { display:flex;align-items:center;gap:12px;width:100%;max-width:380px; }
+        .twr-mult { width:48px;text-align:right;font-family:var(--fs-head);font-size:13px;font-weight:700;flex-shrink:0;transition:.3s; }
+        .twr-cards { display:flex;gap:10px;flex:1;justify-content:center; }
+        .twr-indicator { width:22px;flex-shrink:0;display:flex;justify-content:center;align-items:center; }
+        .twr-base { height:3px;width:260px;border-radius:999px;background:linear-gradient(90deg,transparent,rgba(217,182,90,.35),transparent);margin-top:4px; }
+
+        .twr-ctrl { display:flex;flex-direction:column;gap:16px;background:rgba(11,10,7,.65);border-radius:18px;padding:18px;border:1px solid rgba(217,182,90,.22);backdrop-filter:blur(2px);align-self:start;position:sticky;top:0; }
+        .twr-guide { padding:14px;border-radius:10px;background:rgba(0,0,0,.35);border:1px solid rgba(217,182,90,.15); }
+        .twr-guide-title { font-size:9px;letter-spacing:.22em;color:var(--cream-faint);text-transform:uppercase;font-family:var(--fs-head);margin-bottom:10px; }
+        .twr-section-label { font-size:9px;letter-spacing:.22em;color:var(--cream-faint);text-transform:uppercase;font-family:var(--fs-head);margin-bottom:10px; }
+        .twr-live { padding:14px;border-radius:10px;background:rgba(0,0,0,.35);border:1px solid rgba(217,182,90,.15); }
+        .twr-result { padding:18px;border-radius:12px;border:1px solid;text-align:center; }
+
+        @keyframes arrowPulse { from{opacity:.6;transform:translateX(0)} to{opacity:1;transform:translateX(3px)} }
       `}</style>
     </div>
   )

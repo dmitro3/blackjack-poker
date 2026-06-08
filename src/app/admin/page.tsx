@@ -7,6 +7,7 @@ import Link from 'next/link'
 interface GameRoom {
   code: string
   game: string
+  host_id: string
   host_name: string
   guest_name: string | null
   status: 'waiting' | 'active' | 'solo' | 'ended'
@@ -80,11 +81,13 @@ function Toast({ msg, kind, onDone }: { msg: string; kind: string; onDone: () =>
 function PlayerDetailPanel({
   player,
   playerGames,
+  rooms,
   onClose,
   onBan,
 }: {
   player: Profile
   playerGames: PlayerGameStat[]
+  rooms: GameRoom[]
   onClose: () => void
   onBan: (id: string, banned: boolean) => void
 }) {
@@ -93,6 +96,7 @@ function PlayerDetailPanel({
   const totalLost = Math.max(0, (player.total_wagered || 0) - (player.total_won || 0))
   const mostPlayed = playerGames.length > 0 ? playerGames[0].game : null
   const totalRounds = playerGames.reduce((s, g) => s + g.count, 0)
+  const liveRoom = rooms.find(r => r.host_id === player.id && (r.status === 'active' || r.status === 'solo'))
 
   const GAME_ICONS: Record<string, string> = {
     blackjack: '🃏', poker: '♠', roulette: '🎰', slots: '🎰', baccarat: '🎴',
@@ -238,9 +242,10 @@ function PlayerDetailPanel({
         {/* Action buttons */}
         {!player.is_admin && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 'auto', paddingTop: 8 }}>
-            {status !== 'offline' && (
+            {liveRoom && (
               <Link
-                href={mostPlayed ? `/${mostPlayed}` : '/'}
+                href={`/${liveRoom.game}?spectate=${liveRoom.code}`}
+                target="_blank"
                 style={{
                   display: 'block', textAlign: 'center', padding: '12px 0',
                   background: 'rgba(217,182,90,.1)', border: '1px solid rgba(217,182,90,.3)',
@@ -249,7 +254,7 @@ function PlayerDetailPanel({
                   fontWeight: 700,
                 }}
               >
-                Spectate {mostPlayed ? `→ ${mostPlayed}` : ''}
+                👁 Spectate Live → {liveRoom.game}
               </Link>
             )}
             <button
@@ -437,6 +442,7 @@ export default function AdminPage() {
         <PlayerDetailPanel
           player={selectedPlayer}
           playerGames={sessionsByUser[selectedPlayer.id] || []}
+          rooms={rooms}
           onClose={() => setSelectedPlayer(null)}
           onBan={handleBan}
         />

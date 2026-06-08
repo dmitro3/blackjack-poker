@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -89,6 +89,9 @@ export default function BaccaratPage() {
   const [customChipVal, setCustomChipVal] = useState('')
   const [muted, setMutedUI] = useState(false)
   const deckRef = { current: shuffle(freshDeck()) }
+  const [isSpectator, setIsSpectator] = useState(false)
+  const roomCodeRef = useRef('')
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -105,11 +108,34 @@ export default function BaccaratPage() {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
-      const { data: profile } = await supabase.from('profiles').select('chips').eq('id', user.id).single()
-      if (profile) setBal(profile.chips)
+
+      const params = new URLSearchParams(window.location.search)
+      const sc = params.get('spectate')
+
+      if (sc) {
+        setIsSpectator(true)
+        const ch = supabase.channel(`ht-game-${sc.toUpperCase()}`)
+        ch.on('broadcast', { event: 'STATE' }, ({ payload }) => {
+          const { pc, bc, w } = payload as { pc: Card[]; bc: Card[]; w: string | null }
+          setPlayerCards(pc); setBankerCards(bc); if (w) setWinner(w as 'player' | 'banker' | 'tie')
+        }).subscribe(status => {
+          if (status === 'SUBSCRIBED') ch.send({ type: 'broadcast', event: 'SPECTATOR_JOIN', payload: {} }).catch(() => {})
+        })
+        channelRef.current = ch
+      } else {
+        const { data: profile } = await supabase.from('profiles').select('chips').eq('id', user.id).single()
+        if (profile) setBal(profile.chips)
+        const code = generateCode('baccarat')
+        roomCodeRef.current = code
+        fetch('/api/game/room', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, game: 'baccarat', status: 'solo' }) }).catch(() => {})
+        const ch = supabase.channel(`ht-game-${code}`, { config: { broadcast: { self: false } } })
+        ch.on('broadcast', { event: 'SPECTATOR_JOIN' }, () => { }).subscribe()
+        channelRef.current = ch
+      }
       setLoading(false)
     }
     init()
+    return () => { channelRef.current?.unsubscribe() }
   }, [router])
 
   function addChip(v: number) {
@@ -227,6 +253,11 @@ export default function BaccaratPage() {
   return (
     <div style={{minHeight:'100vh',display:'flex',flexDirection:'column',background:'radial-gradient(120% 80% at 50% -10%, #241f15 0%, #13110b 45%, #0b0a07 100%)'}}>
       {toast && <Toast msg={toast.msg} kind={toast.kind} onDone={() => setToast(null)} />}
+      {isSpectator && (
+        <div style={{position:'sticky',top:0,zIndex:50,background:'rgba(217,182,90,.12)',borderBottom:'1px solid rgba(217,182,90,.3)',padding:'8px 24px',textAlign:'center',fontFamily:'var(--fs-head)',fontSize:12,letterSpacing:'.12em',color:'var(--gold-l)',textTransform:'uppercase'}}>
+          👁 Spectating Live — Read Only
+        </div>
+      )}
 
       <header className="bac-topbar" style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 24px',background:'linear-gradient(180deg,rgba(11,10,7,.95),rgba(11,10,7,.2))'}}>
         <Link href="/" style={{display:'flex',alignItems:'center',gap:10,textDecoration:'none',color:'var(--cream-dim)',fontFamily:'var(--fs-head)',fontSize:13,letterSpacing:'.12em',textTransform:'uppercase',padding:'9px 16px',borderRadius:999,border:'1px solid rgba(217,182,90,.25)'}}>

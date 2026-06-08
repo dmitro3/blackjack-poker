@@ -125,11 +125,15 @@ export default function BlackjackPage() {
   const [hand1Cards, setHand1Cards] = useState<Card[]>([])
   const [hand1Stake, setHand1Stake] = useState(0)
 
+  const [isSpectator, setIsSpectator] = useState(false)
   const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const autoCountRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const deckRef = useRef<Card[]>([])
   const lastBetRef = useRef(0)
   const balRef = useRef(bal)
+  const roomCodeRef = useRef('')
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  const isSpectatorRef = useRef(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -141,21 +145,44 @@ export default function BlackjackPage() {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
-      const { data: profile } = await supabase.from('profiles').select('chips').eq('id', user.id).single()
-      if (profile) {
-        setBal(profile.chips)
-        sessionStartBalRef.current = profile.chips
-        // Check cooldown
-        const cooldownEnd = parseInt(localStorage.getItem('bjCooldownEnd') || '0', 10)
-        if (cooldownEnd > Date.now()) {
-          const remaining = Math.ceil((cooldownEnd - Date.now()) / 1000)
-          setBreakCountdown(remaining)
-          setShowBreak(true)
+
+      const params = new URLSearchParams(window.location.search)
+      const sc = params.get('spectate')
+
+      if (sc) {
+        isSpectatorRef.current = true
+        setIsSpectator(true)
+        const ch = supabase.channel(`ht-game-${sc.toUpperCase()}`)
+        ch.on('broadcast', { event: 'STATE' }, ({ payload }) => {
+          const { p, d, ph } = payload as { p: Card[]; d: Card[]; ph: string }
+          setPlayer(p); setDealer(d); setPhase(ph as Phase)
+        }).subscribe(status => {
+          if (status === 'SUBSCRIBED') ch.send({ type: 'broadcast', event: 'SPECTATOR_JOIN', payload: {} }).catch(() => {})
+        })
+        channelRef.current = ch
+      } else {
+        const { data: profile } = await supabase.from('profiles').select('chips').eq('id', user.id).single()
+        if (profile) {
+          setBal(profile.chips)
+          sessionStartBalRef.current = profile.chips
+          const cooldownEnd = parseInt(localStorage.getItem('bjCooldownEnd') || '0', 10)
+          if (cooldownEnd > Date.now()) {
+            const remaining = Math.ceil((cooldownEnd - Date.now()) / 1000)
+            setBreakCountdown(remaining)
+            setShowBreak(true)
+          }
         }
+        const code = generateCode('blackjack')
+        roomCodeRef.current = code
+        fetch('/api/game/room', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, game: 'blackjack', status: 'solo' }) }).catch(() => {})
+        const ch = supabase.channel(`ht-game-${code}`, { config: { broadcast: { self: false } } })
+        ch.on('broadcast', { event: 'SPECTATOR_JOIN' }, () => { /* spectator will get STATE on next broadcast */ }).subscribe()
+        channelRef.current = ch
       }
       setLoading(false)
     }
     init()
+    return () => { channelRef.current?.unsubscribe() }
   }, [router])
 
   useEffect(() => { balRef.current = bal }, [bal])
@@ -493,6 +520,11 @@ export default function BlackjackPage() {
   return (
     <div className="table-wrap">
       {toast && <Toast msg={toast.msg} kind={toast.kind} onDone={() => setToast(null)} />}
+      {isSpectator && (
+        <div style={{ position:'sticky', top:0, zIndex:50, background:'rgba(217,182,90,.12)', borderBottom:'1px solid rgba(217,182,90,.3)', padding:'8px 24px', textAlign:'center', fontFamily:'var(--fs-head)', fontSize:12, letterSpacing:'.12em', color:'var(--gold-l)', textTransform:'uppercase' }}>
+          👁 Spectating Live — Read Only
+        </div>
+      )}
 
       <header className="topbar">
         <Link className="back" href="/">← Lobby</Link>
