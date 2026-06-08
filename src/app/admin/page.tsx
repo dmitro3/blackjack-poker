@@ -42,6 +42,8 @@ interface GameStat { game: string; count: number; total_wagered: number; total_w
 
 interface PlayerGameStat { game: string; count: number; wagered: number; won: number }
 
+const DIRECTOR_EMAIL = 'vedantbhatia8@gmail.com'
+
 function getOnlineStatus(lastLogin: string | null): 'online' | 'recent' | 'offline' {
   if (!lastLogin) return 'offline'
   const diff = Date.now() - new Date(lastLogin).getTime()
@@ -116,6 +118,12 @@ function PlayerDetailPanel({
               {player.display_name || 'Unknown'}
             </div>
             <div style={{ fontSize: 13, color: 'var(--cream-faint)', marginBottom: 8 }}>{player.email}</div>
+            {player.email === DIRECTOR_EMAIL && (
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 8, padding: '3px 10px', borderRadius: 999, background: 'linear-gradient(135deg, rgba(217,182,90,.18), rgba(155,120,40,.12))', border: '1px solid rgba(217,182,90,.45)' }}>
+                <span style={{ fontSize: 10 }}>♦</span>
+                <span style={{ fontFamily: 'var(--fs-head)', fontSize: 10, letterSpacing: '.18em', color: 'var(--gold-l)', textTransform: 'uppercase', fontWeight: 700 }}>Director</span>
+              </div>
+            )}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{
                 width: 8, height: 8, borderRadius: '50%', background: statusColor(status), display: 'inline-block',
@@ -221,6 +229,8 @@ function PlayerDetailPanel({
         {/* Info */}
         <div style={{ fontSize: 12, color: 'var(--cream-faint)', lineHeight: 1.6 }}>
           <div>Joined: {new Date(player.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</div>
+          <div>Last seen: <span style={{ color: 'var(--cream)' }}>{timeAgo(player.last_login)}</span></div>
+          {player.email === DIRECTOR_EMAIL && <div style={{ color: 'var(--gold-l)', marginTop: 2, fontWeight: 700 }}>♦ Director</div>}
           {player.is_admin && <div style={{ color: 'var(--gold)', marginTop: 2 }}>Administrator</div>}
           {player.is_banned && <div style={{ color: '#e7708a', marginTop: 2 }}>Account Suspended</div>}
         </div>
@@ -533,8 +543,9 @@ export default function AdminPage() {
                               background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0,
                             }}
                           >
-                            <div style={{ fontWeight: 700, color: 'var(--gold-l)', textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 3 }}>
+                            <div style={{ fontWeight: 700, color: 'var(--gold-l)', textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 3, display: 'flex', alignItems: 'center', gap: 6 }}>
                               {p.display_name || 'Unknown'}
+                              {p.email === DIRECTOR_EMAIL && <span style={{ fontSize: 9, letterSpacing: '.14em', color: 'var(--gold)', fontFamily: 'var(--fs-head)', textTransform: 'uppercase', fontWeight: 700, padding: '1px 6px', border: '1px solid rgba(217,182,90,.4)', borderRadius: 999 }}>Director</span>}
                             </div>
                             <div style={{ fontSize: 12, color: 'var(--cream-faint)', marginTop: 2 }}>{p.email}</div>
                             {p.is_admin && <span style={{ fontSize: 10, letterSpacing: '.1em', color: 'var(--gold)', fontFamily: 'var(--fs-head)', textTransform: 'uppercase' }}>Admin</span>}

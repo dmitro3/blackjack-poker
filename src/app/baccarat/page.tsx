@@ -85,6 +85,8 @@ export default function BaccaratPage() {
   const [showHelp, setShowHelp] = useState(false)
   const [showInvite, setShowInvite] = useState(false)
   const [inviteCode, setInviteCode] = useState('')
+  const [showCustomChip, setShowCustomChip] = useState(false)
+  const [customChipVal, setCustomChipVal] = useState('')
   const [muted, setMutedUI] = useState(false)
   const deckRef = { current: shuffle(freshDeck()) }
   const router = useRouter()
@@ -324,12 +326,18 @@ export default function BaccaratPage() {
 
               {betSide && (
                 <div style={{display:'flex',alignItems:'center',gap:14,justifyContent:'center',flexWrap:'wrap'}}>
-                  <div style={{display:'flex',gap:10}}>
+                  <div style={{display:'flex',gap:10,flexWrap:'wrap',justifyContent:'center'}}>
                     {CHIPS_DEF.map(c => (
                       <div key={c.v} className={'chip'+((c.v > bal-bet)?'  dis':'')} style={{background:c.color,opacity:c.v>bal-bet?.4:1,cursor:c.v>bal-bet?'not-allowed':'pointer'}} onClick={() => addChip(c.v)}>
                         <span>{c.label}</span>
                       </div>
                     ))}
+                    <div className="chip" style={{background:'linear-gradient(160deg,#5a3a8a,#3b1d6e)',border:'2px dashed rgba(167,139,250,.6)',fontSize:11}} onClick={() => { setCustomChipVal(''); setShowCustomChip(true) }}>
+                      <span>CUST</span>
+                    </div>
+                    <div className={'chip'+(bal-bet<=0?'  dis':'')} style={{background:'linear-gradient(160deg,#8f0f22,#440b18)',fontSize:10,opacity:bal-bet<=0?.4:1,cursor:bal-bet<=0?'not-allowed':'pointer'}} onClick={() => { if (bal-bet>0) setBet(bal) }}>
+                      <span>ALL IN</span>
+                    </div>
                   </div>
                   {bet > 0 && <button className="btn btn-sm btn-ghost" onClick={() => setBet(0)}>Clear</button>}
                   <button className="btn" disabled={bet <= 0} onClick={deal}>Deal</button>
@@ -368,6 +376,36 @@ export default function BaccaratPage() {
           <span>Tie 8:1</span>
         </div>
       </div>
+
+      {showCustomChip && (
+        <div style={{position:'fixed',inset:0,background:'rgba(5,4,2,.72)',backdropFilter:'blur(5px)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',animation:'floatUp .2s'}} onClick={() => setShowCustomChip(false)}>
+          <div className="gilt" style={{width:320,padding:28,borderRadius:'var(--radius-lg)',position:'relative'}} onClick={e => e.stopPropagation()}>
+            <button style={{position:'absolute',top:12,right:14,background:'none',border:'none',color:'var(--cream-faint)',fontSize:22,cursor:'pointer'}} onClick={() => setShowCustomChip(false)}>×</button>
+            <h2 className="gold-text" style={{fontFamily:'var(--fs-head)',fontWeight:700,fontSize:20,margin:'0 0 8px'}}>Custom Bet</h2>
+            <p style={{color:'var(--cream-dim)',fontSize:14,margin:'0 0 16px'}}>Type any amount to add to your bet.</p>
+            <input
+              type="number"
+              value={customChipVal}
+              onChange={e => setCustomChipVal(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  const v = parseInt(customChipVal, 10)
+                  if (v > 0) addChip(Math.min(v, bal - bet))
+                  setShowCustomChip(false)
+                }
+              }}
+              placeholder="e.g. 7500"
+              style={{width:'100%',background:'rgba(0,0,0,.4)',border:'1px solid rgba(217,182,90,.35)',borderRadius:10,padding:'10px 14px',color:'var(--gold-l)',fontSize:20,fontFamily:'var(--fs-head)',letterSpacing:'.06em',outline:'none',boxSizing:'border-box' as const}}
+              autoFocus
+            />
+            <button className="btn" style={{width:'100%',marginTop:14}} onClick={() => {
+              const v = parseInt(customChipVal, 10)
+              if (v > 0) addChip(Math.min(v, bal - bet))
+              setShowCustomChip(false)
+            }}>Add to Bet</button>
+          </div>
+        </div>
+      )}
 
       {/* Invite modal */}
       {showInvite && (

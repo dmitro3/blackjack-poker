@@ -18,6 +18,8 @@ interface Profile {
   invite_code: string
 }
 
+const DIRECTOR_EMAIL = 'vedantbhatia8@gmail.com'
+
 function fmt(n: number) { return Number(n).toLocaleString('en-US') }
 
 function Toast({ msg, kind, onDone }: { msg: string; kind: string; onDone: () => void }) {
@@ -190,7 +192,12 @@ function LobbyContent() {
             boxShadow:'inset 0 1px 0 rgba(255,255,255,.6), inset 0 -3px 6px var(--gold-deep), 0 4px 12px rgba(0,0,0,.5)',
           }}>H</div>
           <div>
+            <div style={{display:'flex',alignItems:'center',gap:10}}>
             <div className="gold-text lobby-header-logo" style={{fontFamily:'var(--fs-display)',fontWeight:900,fontSize:23,letterSpacing:'.14em'}}>HOUSETABLES</div>
+            {profile?.email === DIRECTOR_EMAIL && (
+              <span style={{fontFamily:'var(--fs-head)',fontSize:10,letterSpacing:'.16em',color:'var(--gold)',textTransform:'uppercase',fontWeight:700,padding:'2px 8px',border:'1px solid rgba(217,182,90,.45)',borderRadius:999,background:'rgba(217,182,90,.08)'}}>Director</span>
+            )}
+          </div>
             <div style={{fontFamily:'var(--fs-head)',fontSize:9,letterSpacing:'.42em',color:'var(--cream-faint)',marginTop:2}}>PRIVATE CARD ROOM</div>
           </div>
         </Link>
@@ -222,7 +229,7 @@ function LobbyContent() {
             <span className="gold-text">The House</span><br/>Always Welcomes You
           </h1>
           <p style={{maxWidth:540,margin:'22px auto 0',color:'var(--cream-dim)',fontSize:17,lineHeight:1.6}}>
-            Five tables. Real stakes, no real money. Pull up a chair, stack your chips, and play.
+            Six tables. Real stakes, no real money. Pull up a chair, stack your chips, and play.
           </p>
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:16,margin:'26px auto 0',maxWidth:340}}>
             <hr className="hr-gold" style={{flex:1,border:'none'}} />
@@ -343,9 +350,9 @@ function LobbyContent() {
             </div>
           </Link>
 
-          {/* Slots — centered in row 2 */}
+          {/* Slots */}
           <Link href="/slots" style={{
-            gridColumn:'2 / span 2',position:'relative',borderRadius:'var(--radius-lg)',overflow:'hidden',cursor:'pointer',
+            gridColumn:'span 2',position:'relative',borderRadius:'var(--radius-lg)',overflow:'hidden',cursor:'pointer',
             textDecoration:'none',color:'inherit',border:'1px solid rgba(217,182,90,.32)',
             boxShadow:'var(--shadow-pop)',transition:'transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s, border-color .25s',
             display:'flex',flexDirection:'column',minHeight:340,
@@ -400,9 +407,9 @@ function LobbyContent() {
             </div>
           </Link>
 
-          {/* Baccarat — centered in row 2, red felt */}
+          {/* Baccarat */}
           <Link href="/baccarat" style={{
-            gridColumn:'4 / span 2',position:'relative',borderRadius:'var(--radius-lg)',overflow:'hidden',cursor:'pointer',
+            gridColumn:'span 2',position:'relative',borderRadius:'var(--radius-lg)',overflow:'hidden',cursor:'pointer',
             textDecoration:'none',color:'inherit',border:'1px solid rgba(217,182,90,.32)',
             boxShadow:'var(--shadow-pop)',transition:'transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s, border-color .25s',
             display:'flex',flexDirection:'column',minHeight:340,
@@ -440,6 +447,39 @@ function LobbyContent() {
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:8}}>
                 <span style={{color:'var(--cream-faint)',fontSize:13}}>Player, Banker, or Tie</span>
                 <span style={{fontFamily:'var(--fs-head)',fontSize:12,letterSpacing:'.14em',color:'var(--gold-l)',textTransform:'uppercase'}}>Take a seat →</span>
+              </div>
+            </div>
+          </Link>
+          {/* Tower of Chance */}
+          <Link href="/tower" style={{
+            gridColumn:'span 2',position:'relative',borderRadius:'var(--radius-lg)',overflow:'hidden',cursor:'pointer',
+            textDecoration:'none',color:'inherit',border:'1px solid rgba(167,139,250,.35)',
+            boxShadow:'var(--shadow-pop)',transition:'transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s, border-color .25s',
+            display:'flex',flexDirection:'column',minHeight:340,
+          }} className="game">
+            <div style={{flex:1,position:'relative',display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',background:'linear-gradient(180deg, #08031a 0%, #0d0524 60%, #130836 100%)'}}>
+              {/* Ambient stars */}
+              <div style={{position:'absolute',inset:0,pointerEvents:'none'}}>
+                {[...Array(18)].map((_,i) => (
+                  <div key={i} style={{position:'absolute',borderRadius:'50%',background:'#c4b5fd',width:2,height:2,opacity:.1+(i%4)*.07,left:(i*19+5)%95+'%',top:(i*13+8)%90+'%'}}/>
+                ))}
+              </div>
+              {/* Tower graphic */}
+              <div style={{zIndex:2,position:'relative',display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
+                {[{c:'rgba(217,182,90,.4)',w:52,label:'300×'},{c:'rgba(251,146,60,.3)',w:62,label:'100×'},{c:'rgba(232,121,249,.25)',w:72,label:'35×'},{c:'rgba(167,139,250,.22)',w:82,label:'12×'},{c:'rgba(124,58,237,.2)',w:92,label:'4.5×'},{c:'rgba(109,40,217,.18)',w:100,label:'2×'}].map((f,i) => (
+                  <div key={i} style={{height:14,width:f.w,borderRadius:4,background:f.c,border:'1px solid rgba(167,139,250,.2)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                    <span style={{fontFamily:'var(--fs-head)',fontSize:8,color:'rgba(255,255,255,.5)',letterSpacing:'.05em'}}>{f.label}</span>
+                  </div>
+                ))}
+                <div style={{height:10,width:110,borderRadius:'0 0 6px 6px',background:'rgba(109,40,217,.15)',border:'1px solid rgba(124,58,237,.15)',marginTop:0}}/>
+              </div>
+              <div style={{position:'absolute',inset:0,background:'radial-gradient(120% 100% at 50% 120%, transparent 40%, rgba(0,0,0,.5))'}}/>
+            </div>
+            <div style={{padding:'20px 24px',background:'linear-gradient(180deg, rgba(8,3,26,.7), #06021a)',borderTop:'1px solid rgba(167,139,250,.2)',position:'relative',zIndex:2}}>
+              <h3 style={{fontFamily:'var(--fs-head)',fontWeight:700,fontSize:23,margin:0,letterSpacing:'.04em',background:'linear-gradient(135deg,#f5f0ff,#c4b5fd)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Tower of Chance</h3>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:8}}>
+                <span style={{color:'rgba(167,139,250,.6)',fontSize:13}}>Climb 8 floors, win 300×</span>
+                <span style={{fontFamily:'var(--fs-head)',fontSize:12,letterSpacing:'.14em',color:'var(--gold-l)',textTransform:'uppercase'}}>Start climb →</span>
               </div>
             </div>
           </Link>

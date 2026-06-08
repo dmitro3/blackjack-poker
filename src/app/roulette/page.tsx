@@ -32,6 +32,32 @@ function Toast({ msg, kind, onDone }: { msg: string; kind: string; onDone: () =>
   return <div style={{position:'fixed',left:'50%',bottom:38,transform:'translateX(-50%)',zIndex:9999,padding:'13px 26px',borderRadius:999,fontFamily:'Cinzel,serif',fontWeight:600,letterSpacing:'.05em',boxShadow:'0 14px 40px rgba(0,0,0,.5)',border:'1px solid rgba(217,182,90,.5)',background:bg,color:kind==='win'?'#2a1f08':'var(--cream)',animation:'floatUp .35s'}}>{msg}</div>
 }
 
+function WinLimitModal({ amount, onLeave }: { amount: number; onLeave: () => void }) {
+  const [count, setCount] = useState(30)
+  useEffect(() => {
+    const id = setInterval(() => setCount(c => { if (c <= 1) { onLeave(); return 0 } return c - 1 }), 1000)
+    return () => clearInterval(id)
+  }, [onLeave])
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(5,4,2,.85)', backdropFilter:'blur(6px)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', animation:'floatUp .3s' }}>
+      <div style={{ width:480, maxWidth:'92vw', background:'linear-gradient(160deg,#1a1305,#0b0a07)', border:'1px solid rgba(217,182,90,.5)', borderRadius:20, padding:40, textAlign:'center', boxShadow:'0 40px 100px rgba(0,0,0,.7)' }}>
+        <div style={{ fontSize:52, marginBottom:16 }}>🏆</div>
+        <h2 style={{ fontFamily:'var(--fs-head)', fontWeight:700, fontSize:24, color:'var(--gold-l)', margin:'0 0 12px', letterSpacing:'.04em' }}>Table Limit Reached</h2>
+        <p style={{ color:'var(--cream-dim)', fontSize:15, lineHeight:1.6, margin:'0 0 10px' }}>
+          You&apos;ve won <strong style={{ color:'var(--gold-l)', fontVariantNumeric:'tabular-nums' }}>{Number(amount).toLocaleString('en-US')}</strong> chips in a single spin — congratulations!
+        </p>
+        <p style={{ color:'var(--cream-faint)', fontSize:13, lineHeight:1.5, margin:'0 0 28px' }}>
+          For fairness, you&apos;re being asked to leave the table. You&apos;ll be locked out of Roulette for 10 minutes.
+        </p>
+        <div style={{ width:64, height:64, borderRadius:'50%', background:'rgba(217,182,90,.12)', border:'2px solid rgba(217,182,90,.4)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 24px', fontFamily:'var(--fs-display)', fontWeight:900, fontSize:22, color:'var(--gold-l)' }}>{count}</div>
+        <button onClick={onLeave} style={{ padding:'14px 40px', borderRadius:12, border:'none', cursor:'pointer', background:'var(--gold-grad)', color:'#2a1f08', fontFamily:'var(--fs-head)', fontWeight:700, fontSize:14, letterSpacing:'.1em', textTransform:'uppercase', boxShadow:'0 8px 24px rgba(217,182,90,.4)' }}>
+          Leave Table
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function RoulettePage() {
   const [bets, setBets] = useState<Record<string, number>>({})
   const [chip, setChip] = useState(5000)
@@ -41,6 +67,11 @@ export default function RoulettePage() {
   const [toast, setToast] = useState<{msg:string,kind:string}|null>(null)
   const [showInvite, setShowInvite] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
+  const [showWinLimit, setShowWinLimit] = useState(false)
+  const [winLimitAmount, setWinLimitAmount] = useState(0)
+  const [showCustomChip, setShowCustomChip] = useState(false)
+  const [customChipVal, setCustomChipVal] = useState('')
+  const [customChipAmount, setCustomChipAmount] = useState(0)
   const [inviteCode, setInviteCode] = useState('')
   const [loading, setLoading] = useState(true)
   const [muted, setMutedUI] = useState(false)
@@ -56,6 +87,11 @@ export default function RoulettePage() {
 
   useEffect(() => {
     async function init() {
+      // Check roulette ban
+      try {
+        const banUntil = parseInt(localStorage.getItem('roulette_ban_until') || '0', 10)
+        if (Date.now() < banUntil) { router.push('/'); return }
+      } catch {}
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
       const { data: profile } = await supabase.from('profiles').select('chips').eq('id', user.id).single()
@@ -140,6 +176,12 @@ export default function RoulettePage() {
       showToast(label+(net>0?'  +'+fmt(net):net<0?'  −'+fmt(wagered):''), net>0?'win':(net<0?'lose':''))
       setBets({})
 
+      if (net >= 1_000_000) {
+        try { localStorage.setItem('roulette_ban_until', String(Date.now() + 10 * 60 * 1000)) } catch {}
+        setWinLimitAmount(net)
+        setTimeout(() => setShowWinLimit(true), 2500)
+      }
+
       // Log to Supabase
       try {
         await fetch('/api/game/session', {
@@ -177,9 +219,14 @@ export default function RoulettePage() {
     </div>
   )
 
+  function leaveTable() {
+    router.push('/')
+  }
+
   return (
     <div className="table-wrap">
       {toast && <Toast msg={toast.msg} kind={toast.kind} onDone={() => setToast(null)} />}
+      {showWinLimit && <WinLimitModal amount={winLimitAmount} onLeave={leaveTable} />}
 
       <header className="topbar">
         <Link className="back" href="/">← Lobby</Link>
@@ -285,6 +332,17 @@ export default function RoulettePage() {
                   <span>{c.label}</span>
                 </div>
               ))}
+              {customChipAmount > 0 && (
+                <div className={'chip'+(chip===customChipAmount?' sel':'')} style={{background:'linear-gradient(160deg,#5a3a8a,#3b1d6e)'}} onClick={() => setChip(customChipAmount)}>
+                  <span>{fmtShort(customChipAmount)}</span>
+                </div>
+              )}
+              <div className="chip" style={{background:'linear-gradient(160deg,#5a3a8a,#2d155c)',border:'2px dashed rgba(167,139,250,.6)',fontSize:11}} onClick={() => { setCustomChipVal(''); setShowCustomChip(true) }}>
+                <span>CUST</span>
+              </div>
+              <div className={'chip'+(chip===bal?' sel':'')} style={{background:'linear-gradient(160deg,#8f0f22,#440b18)',fontSize:10}} onClick={() => setChip(bal)}>
+                <span>ALL IN</span>
+              </div>
             </div>
             <div className="ctrl-right">
               <span className="total-bet">In play <b className="tabnum">{fmt(total)}</b></span>
@@ -294,6 +352,36 @@ export default function RoulettePage() {
           </div>
         </div>
       </div>
+
+      {showCustomChip && (
+        <div className="modal-bg" onClick={() => setShowCustomChip(false)}>
+          <div className="modal gilt" onClick={e => e.stopPropagation()} style={{width:320}}>
+            <button className="x" onClick={() => setShowCustomChip(false)}>×</button>
+            <h2 className="gold-text" style={{marginBottom:6}}>Custom Chip</h2>
+            <p style={{marginBottom:16}}>Enter any amount to use as your chip value.</p>
+            <input
+              type="number"
+              value={customChipVal}
+              onChange={e => setCustomChipVal(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  const v = parseInt(customChipVal, 10)
+                  if (v > 0) { setCustomChipAmount(v); setChip(v) }
+                  setShowCustomChip(false)
+                }
+              }}
+              placeholder="e.g. 7500"
+              style={{width:'100%',background:'rgba(0,0,0,.4)',border:'1px solid rgba(217,182,90,.35)',borderRadius:10,padding:'10px 14px',color:'var(--gold-l)',fontSize:20,fontFamily:'var(--fs-head)',letterSpacing:'.06em',outline:'none',boxSizing:'border-box' as const}}
+              autoFocus
+            />
+            <button className="btn" style={{width:'100%',marginTop:14}} onClick={() => {
+              const v = parseInt(customChipVal, 10)
+              if (v > 0) { setCustomChipAmount(v); setChip(v) }
+              setShowCustomChip(false)
+            }}>Set Chip</button>
+          </div>
+        </div>
+      )}
 
       {showInvite && (
         <div className="modal-bg" onClick={() => setShowInvite(false)}>

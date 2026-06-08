@@ -106,6 +106,8 @@ export default function BlackjackPage() {
   const [toast, setToast] = useState<{msg:string,kind:string}|null>(null)
   const [showInvite, setShowInvite] = useState(false)
   const [inviteCode, setInviteCode] = useState('')
+  const [showCustomChip, setShowCustomChip] = useState(false)
+  const [customChipVal, setCustomChipVal] = useState('')
   const [loading, setLoading] = useState(true)
   const [autoDeal, setAutoDeal] = useState(false)
   const [autoCountdown, setAutoCountdown] = useState(0)
@@ -592,6 +594,12 @@ export default function BlackjackPage() {
                   <span>{c.label}</span>
                 </div>
               ))}
+              <div className="chip" style={{background:'linear-gradient(160deg,#5a3a8a,#3b1d6e)',border:'2px dashed rgba(167,139,250,.6)',fontSize:11}} onClick={() => { setCustomChipVal(''); setShowCustomChip(true) }}>
+                <span>CUST</span>
+              </div>
+              <div className={'chip'+(bal-bet<=0?' dis':'')} style={{background:'linear-gradient(160deg,#8f0f22,#440b18)',fontSize:10}} onClick={() => { if (bal-bet>0) setBet(bal) }}>
+                <span>ALL IN</span>
+              </div>
             </div>
             <div className="vert" />
             <div className="actions">
@@ -654,6 +662,36 @@ export default function BlackjackPage() {
           </button>
         </div>
       </div>
+
+      {showCustomChip && (
+        <div className="modal-bg" onClick={() => setShowCustomChip(false)}>
+          <div className="modal gilt" onClick={e => e.stopPropagation()} style={{width:320}}>
+            <button className="x" onClick={() => setShowCustomChip(false)}>×</button>
+            <h2 className="gold-text" style={{marginBottom:6}}>Custom Bet</h2>
+            <p style={{marginBottom:16}}>Type any amount to add to your bet.</p>
+            <input
+              type="number"
+              value={customChipVal}
+              onChange={e => setCustomChipVal(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  const v = parseInt(customChipVal, 10)
+                  if (v > 0) addChip(Math.min(v, bal - bet))
+                  setShowCustomChip(false)
+                }
+              }}
+              placeholder="e.g. 7500"
+              style={{width:'100%',background:'rgba(0,0,0,.4)',border:'1px solid rgba(217,182,90,.35)',borderRadius:10,padding:'10px 14px',color:'var(--gold-l)',fontSize:20,fontFamily:'var(--fs-head)',letterSpacing:'.06em',outline:'none',boxSizing:'border-box' as const}}
+              autoFocus
+            />
+            <button className="btn" style={{width:'100%',marginTop:14}} onClick={() => {
+              const v = parseInt(customChipVal, 10)
+              if (v > 0) addChip(Math.min(v, bal - bet))
+              setShowCustomChip(false)
+            }}>Add to Bet</button>
+          </div>
+        </div>
+      )}
 
       {showInvite && (
         <div className="modal-bg" onClick={() => setShowInvite(false)}>
