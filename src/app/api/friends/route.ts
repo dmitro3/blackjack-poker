@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient, createServerSupabaseClient } from '@/lib/supabase-server'
 
+const DIRECTOR_EMAIL = 'vedantbhatia8@gmail.com'
+const DIRECTOR_CODE = 'VEDANT'
+
 function genCode() {
   const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
   return Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
@@ -16,14 +19,23 @@ export async function GET() {
   // Get (or generate) friend code for current user
   const { data: me } = await admin.from('profiles').select('invite_code').eq('id', user.id).single()
   let myCode = me?.invite_code
-  if (!myCode) {
-    myCode = genCode()
+
+  // Auto-assign special codes or generate random
+  const wantedCode = user.email === DIRECTOR_EMAIL ? DIRECTOR_CODE : null
+  if (!myCode || (wantedCode && myCode !== wantedCode)) {
+    myCode = wantedCode ?? genCode()
     await admin.from('profiles').update({ invite_code: myCode }).eq('id', user.id)
   }
 
   // Get friend IDs
-  const { data: friendships } = await admin
+  const { data: friendships, error: fe } = await admin
     .from('friendships').select('friend_id').eq('user_id', user.id)
+
+  if (fe) {
+    console.error('friendships query error:', fe.message)
+    return NextResponse.json({ friends: [], myCode })
+  }
+
   const friendIds = (friendships || []).map((f: { friend_id: string }) => f.friend_id)
 
   let friends: object[] = []
@@ -36,6 +48,8 @@ export async function GET() {
         .neq('status', 'ended')
         .gt('updated_at', new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()),
     ])
+
+    if (profilesRes.error) console.error('profiles query error:', profilesRes.error.message)
 
     const roomByHost = Object.fromEntries(
       (roomsRes.data || []).map((r: { host_id: string; code: string; game: string }) => [r.host_id, r])
@@ -79,10 +93,15 @@ export async function POST(req: Request) {
 
   if (existing) return NextResponse.json({ error: 'Already friends!' }, { status: 400 })
 
-  await admin.from('friendships').insert([
+  const { error: insertErr } = await admin.from('friendships').insert([
     { user_id: user.id, friend_id: friend.id },
     { user_id: friend.id, friend_id: user.id },
   ])
 
-  return NextResponse.json({ name: friend.display_name || 'Friend' })
+  if (insertErr) {
+    console.error('friendships insert error:', insertErr.message)
+    return NextResponse.json({ error: 'Could not add friend — the friendships table may need to be created. See supabase/schema.sql.' }, { status: 500 })
+  }
+
+  return NextResponse.json({ name: friend.display_name || 'Friend', id: friend.id })
 }

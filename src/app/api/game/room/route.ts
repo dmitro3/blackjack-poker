@@ -11,16 +11,16 @@ export async function POST(req: Request) {
   const admin = createAdminClient()
 
   try {
-    if (status === 'waiting') {
+    if (status === 'solo' || status === 'waiting') {
       const { data: profile } = await admin
         .from('profiles').select('display_name').eq('id', user.id).single()
       await admin.from('game_rooms').upsert({
         code,
-        game: game || 'poker',
+        game: game || 'blackjack',
         host_id: user.id,
         host_name: profile?.display_name || 'Host',
         guest_name: null,
-        status: 'waiting',
+        status,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'code' })
     } else if (status === 'active') {

@@ -42,7 +42,11 @@ export default function FriendsBubble() {
     }
   }, [])
 
-  useEffect(() => { loadFriends() }, [loadFriends])
+  useEffect(() => {
+    loadFriends()
+    const id = setInterval(loadFriends, 30000)
+    return () => clearInterval(id)
+  }, [loadFriends])
 
   async function addFriend() {
     if (!addCode.trim() || adding) return
@@ -54,8 +58,15 @@ export default function FriendsBubble() {
     })
     const data = await res.json()
     setAdding(false)
-    if (res.ok) { setAddOk(`${data.name} added!`); setAddCode(''); loadFriends() }
-    else setAddErr(data.error || 'Could not add friend')
+    if (res.ok) {
+      setAddOk(`${data.name} added!`)
+      setAddCode('')
+      // Optimistically add friend to list, then do a full reload
+      setFriends(prev => [...prev, { id: data.id, display_name: data.name, last_login: null, activeGame: null }])
+      setTimeout(loadFriends, 500)
+    } else {
+      setAddErr(data.error || 'Could not add friend')
+    }
   }
 
   const onlineFriends = friends.filter(f => isOnline(f.last_login))

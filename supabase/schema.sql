@@ -60,7 +60,7 @@ create policy "Service role can do everything on rooms" on public.game_rooms
   for all using (auth.role() = 'service_role');
 
 -- friendships table (bidirectional: A→B and B→A both stored)
-create table public.friendships (
+create table if not exists public.friendships (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references public.profiles(id) on delete cascade,
   friend_id uuid references public.profiles(id) on delete cascade,
