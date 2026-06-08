@@ -348,6 +348,17 @@ export default function BlackjackPage() {
     }
   }, [router])
 
+  // Keep room alive in admin panel while host is playing
+  useEffect(() => {
+    if (!roomCodeRef.current) return
+    const ping = () => {
+      if (!roomCodeRef.current || isGuestRef.current || isSpectatorRef.current) return
+      fetch('/api/game/heartbeat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: roomCodeRef.current }) }).catch(() => {})
+    }
+    const id = setInterval(ping, 30000)
+    return () => clearInterval(id)
+  }, [loading])
+
   // Bot dealer: runs when host disconnects while guest is waiting for dealer result
   useEffect(() => {
     if (!hostLeft || guestPhase !== 'waiting') return

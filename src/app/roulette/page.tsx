@@ -225,6 +225,16 @@ export default function RoulettePage() {
     return () => { channelRef.current?.unsubscribe() }
   }, [router])
 
+  // Keep room alive in admin panel while host is playing
+  useEffect(() => {
+    const ping = () => {
+      if (!roomCodeRef.current || isGuestRef.current || isSpectatorRef.current) return
+      fetch('/api/game/heartbeat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: roomCodeRef.current }) }).catch(() => {})
+    }
+    const id = setInterval(ping, 30000)
+    return () => clearInterval(id)
+  }, [loading])
+
   function showToast(msg: string, kind = '') { setToast({ msg, kind }) }
 
   const total = Object.values(bets).reduce((a, b) => a+b, 0)

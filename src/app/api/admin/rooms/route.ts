@@ -12,7 +12,7 @@ export async function GET() {
   if (!profile?.is_admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   try {
-    const cutoff = new Date(Date.now() - 15 * 60 * 1000).toISOString()
+    const cutoff = new Date(Date.now() - 1 * 60 * 1000).toISOString()
     const { data: rooms } = await admin
       .from('game_rooms')
       .select('*')
