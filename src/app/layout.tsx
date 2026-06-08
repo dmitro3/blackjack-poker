@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import AdminBubble from "@/components/AdminBubble";
+import FriendsBubble from "@/components/FriendsBubble";
 import HeartbeatProvider from "@/components/HeartbeatProvider";
 
 export const metadata: Metadata = {
@@ -24,6 +25,7 @@ export default function RootLayout({
         {children}
         <HeartbeatProvider />
         <AdminBubble />
+        <FriendsBubble />
       </body>
     </html>
   );

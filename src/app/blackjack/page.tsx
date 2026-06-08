@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { playDeal, playChip, playWin, playLose, startTension, stopTension, isMuted, setMuted } from '@/lib/casino-sounds'
 import { generateCode, prettyCode } from '@/lib/invite-codes'
 
 const SUITS = [
@@ -94,6 +93,7 @@ function Toast({ msg, kind, onDone }: { msg: string; kind: string; onDone: () =>
 }
 
 export default function BlackjackPage() {
+  // Host game state
   const [phase, setPhase] = useState<Phase>('bet')
   const [bet, setBet] = useState(0)
   const [lastBet, setLastBet] = useState(0)
@@ -105,7 +105,6 @@ export default function BlackjackPage() {
   const [bal, setBal] = useState(100000)
   const [toast, setToast] = useState<{msg:string,kind:string}|null>(null)
   const [showInvite, setShowInvite] = useState(false)
-  const [inviteCode, setInviteCode] = useState('')
   const [showCustomChip, setShowCustomChip] = useState(false)
   const [customChipVal, setCustomChipVal] = useState('')
   const [loading, setLoading] = useState(true)
@@ -114,10 +113,9 @@ export default function BlackjackPage() {
   const [showHelp, setShowHelp] = useState(false)
   const [showBreak, setShowBreak] = useState(false)
   const [breakCountdown, setBreakCountdown] = useState(0)
-  const [muted, setMutedUI] = useState(false)
   const sessionStartBalRef = useRef(0)
 
-  // Split state
+  // Split state (host only)
   const [splitCards, setSplitCards] = useState<Card[]>([])
   const [splitBet, setSplitBet] = useState(0)
   const [onSplit, setOnSplit] = useState(false)
@@ -125,21 +123,39 @@ export default function BlackjackPage() {
   const [hand1Cards, setHand1Cards] = useState<Card[]>([])
   const [hand1Stake, setHand1Stake] = useState(0)
 
+  // Multiplayer guest state
+  const [isGuest, setIsGuest] = useState(false)
+  const [guestPhase, setGuestPhase] = useState<'betting'|'playing'|'waiting'|'done'>('betting')
+  const [guestBet, setGuestBet] = useState(0)
+  const [guestPlayer, setGuestPlayer] = useState<Card[]>([])
+  const [guestDealer, setGuestDealer] = useState<Card[]>([])
+  const [guestHideHole, setGuestHideHole] = useState(true)
+  const [guestResult, setGuestResult] = useState<HandResult|null>(null)
+  const [guestDoubled, setGuestDoubled] = useState(false)
+
   const [isSpectator, setIsSpectator] = useState(false)
   const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const autoCountRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const deckRef = useRef<Card[]>([])
+  const guestDeckRef = useRef<Card[]>([])
   const lastBetRef = useRef(0)
   const balRef = useRef(bal)
   const roomCodeRef = useRef('')
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const isSpectatorRef = useRef(false)
+  const isGuestRef = useRef(false)
+  // Refs for access inside Realtime closures
+  const guestHandRef = useRef<Card[]>([])
+  const guestBetRef = useRef(0)
+  const guestPhaseRef = useRef<'betting'|'playing'|'waiting'|'done'>('betting')
   const router = useRouter()
   const supabase = createClient()
 
-  useEffect(() => {
-    try { setMutedUI(localStorage.getItem('casinoMuted') === '1') } catch {}
-  }, [])
+  useEffect(() => { balRef.current = bal }, [bal])
+  useEffect(() => { lastBetRef.current = lastBet }, [lastBet])
+  useEffect(() => { guestHandRef.current = guestPlayer }, [guestPlayer])
+  useEffect(() => { guestBetRef.current = guestBet }, [guestBet])
+  useEffect(() => { guestPhaseRef.current = guestPhase }, [guestPhase])
 
   useEffect(() => {
     async function init() {
@@ -147,9 +163,61 @@ export default function BlackjackPage() {
       if (!user) { router.push('/login'); return }
 
       const params = new URLSearchParams(window.location.search)
+      const jc = params.get('join')
       const sc = params.get('spectate')
 
-      if (sc) {
+      if (jc) {
+        // Guest player — same dealer, own hand
+        isGuestRef.current = true
+        setIsGuest(true)
+        const { data: profile } = await supabase.from('profiles').select('chips').eq('id', user.id).single()
+        if (profile) { setBal(profile.chips); sessionStartBalRef.current = profile.chips }
+
+        const ch = supabase.channel(`ht-game-${jc.toUpperCase()}`)
+        ch.on('broadcast', { event: 'BJ_DEAL_START' }, async ({ payload }) => {
+          const { dealerUpcard } = payload as { dealerUpcard: Card }
+          const stake = guestBetRef.current
+          if (stake <= 0) return
+          setBal(b => b - stake)
+          setGuestDealer([dealerUpcard])
+          setGuestHideHole(true)
+          setGuestDoubled(false)
+          setGuestResult(null)
+          if (guestDeckRef.current.length < 20) guestDeckRef.current = shuffle(freshDeck())
+          const p = [guestDeckRef.current.pop()!, guestDeckRef.current.pop()!]
+          setGuestPlayer(p)
+          if (handValue(p).total === 21) setGuestPhase('waiting')
+          else setGuestPhase('playing')
+        })
+        .on('broadcast', { event: 'BJ_DEALER_DONE' }, ({ payload }) => {
+          const { dealerHand } = payload as { dealerHand: Card[] }
+          const myHand = guestHandRef.current
+          const myStake = guestBetRef.current
+          if (myStake <= 0 || guestPhaseRef.current === 'betting') return
+          setGuestDealer(dealerHand)
+          setGuestHideHole(false)
+          const dv = handValue(dealerHand).total
+          const pv = handValue(myHand).total
+          let kind: string, payout: number
+          if (pv > 21)      { kind = 'lose'; payout = 0 }
+          else if (dv > 21) { kind = 'win';  payout = myStake * 2 }
+          else if (pv > dv) { kind = 'win';  payout = myStake * 2 }
+          else if (pv < dv) { kind = 'lose'; payout = 0 }
+          else              { kind = 'push'; payout = myStake }
+          const net = payout - myStake
+          setBal(b => b + payout)
+          const msg = kind === 'win' ? (dv > 21 ? 'Dealer busts' : 'You win') : kind === 'push' ? 'Push' : (pv > 21 ? 'Bust' : 'Dealer wins')
+          setGuestResult({ kind, msg, net })
+          setGuestPhase('done')
+          setToast({ msg: msg + (net > 0 ? '  +'+fmt(net) : net < 0 ? '  −'+fmt(-net) : ''), kind: kind === 'push' ? '' : kind })
+          fetch('/api/game/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ game: 'blackjack', chips_wagered: myStake, chips_won: payout }) }).catch(() => {})
+        })
+        .subscribe(status => {
+          if (status === 'SUBSCRIBED') ch.send({ type: 'broadcast', event: 'GUEST_JOIN', payload: {} }).catch(() => {})
+        })
+        channelRef.current = ch
+
+      } else if (sc) {
         isSpectatorRef.current = true
         setIsSpectator(true)
         const ch = supabase.channel(`ht-game-${sc.toUpperCase()}`)
@@ -160,6 +228,7 @@ export default function BlackjackPage() {
           if (status === 'SUBSCRIBED') ch.send({ type: 'broadcast', event: 'SPECTATOR_JOIN', payload: {} }).catch(() => {})
         })
         channelRef.current = ch
+
       } else {
         const { data: profile } = await supabase.from('profiles').select('chips').eq('id', user.id).single()
         if (profile) {
@@ -176,7 +245,7 @@ export default function BlackjackPage() {
         roomCodeRef.current = code
         fetch('/api/game/room', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, game: 'blackjack', status: 'solo' }) }).catch(() => {})
         const ch = supabase.channel(`ht-game-${code}`, { config: { broadcast: { self: false } } })
-        ch.on('broadcast', { event: 'SPECTATOR_JOIN' }, () => { /* spectator will get STATE on next broadcast */ }).subscribe()
+        ch.on('broadcast', { event: 'SPECTATOR_JOIN' }, () => {}).subscribe()
         channelRef.current = ch
       }
       setLoading(false)
@@ -185,10 +254,7 @@ export default function BlackjackPage() {
     return () => { channelRef.current?.unsubscribe() }
   }, [router])
 
-  useEffect(() => { balRef.current = bal }, [bal])
-  useEffect(() => { lastBetRef.current = lastBet }, [lastBet])
-
-  // Responsible gambling: detect 10x gain from 50k+ starting balance
+  // Responsible gambling
   useEffect(() => {
     if (phase !== 'done') return
     const start = sessionStartBalRef.current
@@ -201,34 +267,27 @@ export default function BlackjackPage() {
     }
   }, [phase, bal])
 
-  // Countdown timer for break screen
+  // Break countdown
   useEffect(() => {
     if (!showBreak || breakCountdown <= 0) return
     const t = setInterval(() => {
-      setBreakCountdown(c => {
-        if (c <= 1) { clearInterval(t); return 0 }
-        return c - 1
-      })
+      setBreakCountdown(c => { if (c <= 1) { clearInterval(t); return 0 } return c - 1 })
     }, 1000)
     return () => clearInterval(t)
   }, [showBreak])
 
-  // Auto-deal: when hand ends and autoDeal is on, countdown then re-deal
+  // Auto-deal
   useEffect(() => {
     if (phase !== 'done' || !autoDeal) return
     const DELAY = 2500
     let elapsed = 0
     setAutoCountdown(DELAY)
-    autoCountRef.current = setInterval(() => {
-      elapsed += 100
-      setAutoCountdown(Math.max(0, DELAY - elapsed))
-    }, 100)
+    autoCountRef.current = setInterval(() => { elapsed += 100; setAutoCountdown(Math.max(0, DELAY - elapsed)) }, 100)
     autoTimerRef.current = setTimeout(async () => {
       clearInterval(autoCountRef.current!)
       setAutoCountdown(0)
       const betAmt = lastBetRef.current
       if (betAmt <= 0 || betAmt > balRef.current) return
-      // Reset all state
       setPlayer([]); setDealer([]); setResult(null); setSplitResult(null)
       setHideHole(true); setDoubled(false)
       setSplitCards([]); setSplitBet(0); setOnSplit(false)
@@ -240,10 +299,11 @@ export default function BlackjackPage() {
       const p: Card[] = [], d: Card[] = []
       setPlayer([]); setDealer([])
       await sleep(60)
-      playDeal(); p.push(deckRef.current.pop()!); setPlayer([...p]); await sleep(260)
-      playDeal(); d.push(deckRef.current.pop()!); setDealer([...d]); await sleep(260)
-      playDeal(); p.push(deckRef.current.pop()!); setPlayer([...p]); await sleep(260)
-      playDeal(); d.push(deckRef.current.pop()!); setDealer([...d]); await sleep(360)
+      p.push(deckRef.current.pop()!); setPlayer([...p]); await sleep(260)
+      d.push(deckRef.current.pop()!); setDealer([...d]); await sleep(260)
+      p.push(deckRef.current.pop()!); setPlayer([...p]); await sleep(260)
+      d.push(deckRef.current.pop()!); setDealer([...d]); await sleep(360)
+      channelRef.current?.send({ type: 'broadcast', event: 'BJ_DEAL_START', payload: { dealerUpcard: d[0] } }).catch(() => {})
       const pv = handValue(p).total, dv = handValue(d).total
       if (pv === 21 || dv === 21) {
         setHideHole(false); await sleep(500)
@@ -267,7 +327,6 @@ export default function BlackjackPage() {
   function addChip(v: number) {
     if (phase !== 'bet') return
     if (v > bal - bet) { showToast('Not enough chips for that'); return }
-    playChip()
     setBet(b => b + v)
   }
 
@@ -286,10 +345,12 @@ export default function BlackjackPage() {
     const p: Card[] = [], d: Card[] = []
     setPlayer([]); setDealer([])
     await sleep(60)
-    playDeal(); p.push(draw()); setPlayer([...p]); await sleep(260)
-    playDeal(); d.push(draw()); setDealer([...d]); await sleep(260)
-    playDeal(); p.push(draw()); setPlayer([...p]); await sleep(260)
-    playDeal(); d.push(draw()); setDealer([...d]); await sleep(360)
+    p.push(draw()); setPlayer([...p]); await sleep(260)
+    d.push(draw()); setDealer([...d]); await sleep(260)
+    p.push(draw()); setPlayer([...p]); await sleep(260)
+    d.push(draw()); setDealer([...d]); await sleep(360)
+    // Broadcast to guests so they can play against same dealer
+    channelRef.current?.send({ type: 'broadcast', event: 'BJ_DEAL_START', payload: { dealerUpcard: d[0] } }).catch(() => {})
     const pv = handValue(p).total, dv = handValue(d).total
     if (pv === 21 || dv === 21) {
       setHideHole(false); await sleep(500)
@@ -314,17 +375,11 @@ export default function BlackjackPage() {
       setPlayer(p); await sleep(300)
       const v = handValue(p).total
       if (v > 21) {
-        if (splitCards.length > 0) {
-          setHand1Cards(p); setHand1Stake(doubled ? lastBet*2 : lastBet); setOnSplit(true)
-        } else {
-          finishSingle('lose', dealer, p, doubled ? lastBet*2 : lastBet, 'Bust')
-        }
+        if (splitCards.length > 0) { setHand1Cards(p); setHand1Stake(doubled ? lastBet*2 : lastBet); setOnSplit(true) }
+        else finishSingle('lose', dealer, p, doubled ? lastBet*2 : lastBet, 'Bust')
       } else if (v === 21) {
-        if (splitCards.length > 0) {
-          setHand1Cards(p); setHand1Stake(doubled ? lastBet*2 : lastBet); setOnSplit(true)
-        } else {
-          doStand(p)
-        }
+        if (splitCards.length > 0) { setHand1Cards(p); setHand1Stake(doubled ? lastBet*2 : lastBet); setOnSplit(true) }
+        else doStand(p)
       }
     }
   }
@@ -348,11 +403,8 @@ export default function BlackjackPage() {
       setPlayer(p); await sleep(380)
       const v = handValue(p).total
       if (v > 21) {
-        if (splitCards.length > 0) {
-          setHand1Cards(p); setHand1Stake(stake); setOnSplit(true)
-        } else {
-          finishSingle('lose', dealer, p, stake, 'Bust')
-        }
+        if (splitCards.length > 0) { setHand1Cards(p); setHand1Stake(stake); setOnSplit(true) }
+        else finishSingle('lose', dealer, p, stake, 'Bust')
       } else {
         doStand(p, stake)
       }
@@ -370,12 +422,9 @@ export default function BlackjackPage() {
     const newMain = [c1, n1], newSplit = [c2, n2]
     setPlayer(newMain); setSplitCards(newSplit)
     await sleep(300)
-    // If main hand hits 21, auto-switch to split
     if (handValue(newMain).total === 21) {
       setHand1Cards(newMain); setHand1Stake(lastBet); setOnSplit(true)
-      if (handValue(newSplit).total === 21) {
-        await runDealer(newMain, lastBet, newSplit, lastBet)
-      }
+      if (handValue(newSplit).total === 21) await runDealer(newMain, lastBet, newSplit, lastBet)
     }
   }
 
@@ -395,7 +444,6 @@ export default function BlackjackPage() {
 
   async function runDealer(h1: Card[], s1: number, h2: Card[] | null, s2: number) {
     setPhase('dealer')
-    startTension()
     setHideHole(true); await sleep(200)
     setHideHole(false); await sleep(620)
     let d = [...dealer]
@@ -426,8 +474,6 @@ export default function BlackjackPage() {
       msg2 = kind2 === 'win' ? (dv > 21 ? 'Dealer busts' : 'You win') : kind2 === 'push' ? 'Push' : (handValue(h2).total > 21 ? 'Bust' : 'Dealer wins')
     }
 
-    stopTension()
-    if (net1 > 0 || net2 > 0) playWin(); else if (kind1 === 'lose' && (!h2 || kind2 === 'lose')) playLose()
     setBal(b => b + payout1 + payout2)
     setResult({ kind: kind1, msg: msg1, net: net1 })
     if (h2 && h2.length > 0) setSplitResult({ kind: kind2, msg: msg2, net: net2 })
@@ -439,12 +485,12 @@ export default function BlackjackPage() {
     } else {
       showToast(msg1 + (net1 > 0 ? '  +'+fmt(net1) : net1 < 0 ? '  −'+fmt(-net1) : ''), kind1 === 'push' ? '' : kind1)
     }
+
+    // Broadcast final dealer hand to guests
+    channelRef.current?.send({ type: 'broadcast', event: 'BJ_DEALER_DONE', payload: { dealerHand: d } }).catch(() => {})
+
     try {
-      await fetch('/api/game/session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ game: 'blackjack', chips_wagered: s1 + (h2 ? s2 : 0), chips_won: payout1 + payout2 }),
-      })
+      await fetch('/api/game/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ game: 'blackjack', chips_wagered: s1 + (h2 ? s2 : 0), chips_won: payout1 + payout2 }) })
     } catch { /* best effort */ }
   }
 
@@ -457,16 +503,13 @@ export default function BlackjackPage() {
     else if (kind === 'push') { payout = stake;   kindUI = 'push'; msg = 'Push' }
     else                      { payout = 0;       kindUI = 'lose'; msg = msgIn || 'Dealer wins' }
     const net = payout - stake
-    if (kindUI === 'win') playWin(); else if (kindUI === 'lose') playLose()
     setBal(b => b + payout)
     setResult({ kind: kindUI, msg, net })
     showToast(msg + (net > 0 ? '  +'+fmt(net) : net < 0 ? '  −'+fmt(-net) : ''), kindUI === 'push' ? '' : kindUI)
+    // Even on instant finish, guests still waiting — send dealer done
+    channelRef.current?.send({ type: 'broadcast', event: 'BJ_DEALER_DONE', payload: { dealerHand: d } }).catch(() => {})
     try {
-      fetch('/api/game/session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ game: 'blackjack', chips_wagered: stake, chips_won: payout }),
-      })
+      fetch('/api/game/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ game: 'blackjack', chips_wagered: stake, chips_won: payout }) })
     } catch { /* best effort */ }
   }
 
@@ -475,6 +518,42 @@ export default function BlackjackPage() {
     setHideHole(true); setDoubled(false)
     setSplitCards([]); setSplitBet(0); setOnSplit(false); setHand1Cards([]); setHand1Stake(0)
     setBet(lastBet && lastBet <= bal ? lastBet : 0)
+  }
+
+  // Guest game functions
+  function guestDraw(): Card {
+    if (guestDeckRef.current.length < 12) guestDeckRef.current = shuffle(freshDeck())
+    return guestDeckRef.current.pop()!
+  }
+
+  async function guestHit() {
+    if (guestPhase !== 'playing') return
+    const p = [...guestPlayer, guestDraw()]
+    setGuestPlayer(p); await sleep(300)
+    if (handValue(p).total >= 21) setGuestPhase('waiting')
+  }
+
+  function guestStand() {
+    if (guestPhase !== 'playing') return
+    setGuestPhase('waiting')
+  }
+
+  async function guestDouble() {
+    if (guestPhase !== 'playing' || guestPlayer.length !== 2 || bal < guestBet) return
+    setBal(b => b - guestBet)
+    const newStake = guestBet * 2
+    setGuestBet(newStake)
+    setGuestDoubled(true)
+    const p = [...guestPlayer, guestDraw()]
+    setGuestPlayer(p); await sleep(380)
+    setGuestPhase('waiting')
+  }
+
+  function guestNewHand() {
+    setGuestPhase('betting')
+    setGuestPlayer([]); setGuestDealer([]); setGuestResult(null)
+    setGuestHideHole(true); setGuestDoubled(false)
+    setGuestBet(0)
   }
 
   if (loading) return (
@@ -490,24 +569,14 @@ export default function BlackjackPage() {
       <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',padding:24,background:'radial-gradient(120% 80% at 50% -10%, #241f15 0%, #13110b 45%, #0b0a07 100%)'}}>
         <div className="gilt" style={{maxWidth:460,width:'100%',padding:40,textAlign:'center',animation:'floatUp .4s'}}>
           <div style={{fontSize:48,marginBottom:16}}>🎰</div>
-          <h2 style={{fontFamily:'var(--fs-display)',fontWeight:900,fontSize:26,marginBottom:12,color:'var(--gold-l)'}}>
-            Take a Break
-          </h2>
+          <h2 style={{fontFamily:'var(--fs-display)',fontWeight:900,fontSize:26,marginBottom:12,color:'var(--gold-l)'}}>Take a Break</h2>
           <p style={{color:'var(--cream-dim)',fontSize:15,lineHeight:1.65,marginBottom:24}}>
             You&apos;ve had an incredible run — your balance is up <strong style={{color:'var(--gold-l)'}}>10×</strong> from when you started this session. We&apos;re asking you to step away from the table and cool off for a moment.
           </p>
-          <div style={{fontFamily:'var(--fs-head)',fontSize:42,fontWeight:800,color:'var(--gold-l)',marginBottom:8,letterSpacing:'.04em'}}>
-            {mins}:{secs.toString().padStart(2,'0')}
-          </div>
-          <div style={{fontFamily:'var(--fs-head)',fontSize:11,letterSpacing:'.3em',color:'var(--cream-faint)',textTransform:'uppercase',marginBottom:32}}>
-            Blackjack resumes in
-          </div>
-          <Link href="/" className="btn" style={{display:'block',textAlign:'center',textDecoration:'none'}}>
-            Return to Lobby
-          </Link>
-          <p style={{marginTop:20,fontSize:11,color:'var(--cream-faint)',lineHeight:1.6}}>
-            Play responsibly. These chips hold no cash value.
-          </p>
+          <div style={{fontFamily:'var(--fs-head)',fontSize:42,fontWeight:800,color:'var(--gold-l)',marginBottom:8,letterSpacing:'.04em'}}>{mins}:{secs.toString().padStart(2,'0')}</div>
+          <div style={{fontFamily:'var(--fs-head)',fontSize:11,letterSpacing:'.3em',color:'var(--cream-faint)',textTransform:'uppercase',marginBottom:32}}>Blackjack resumes in</div>
+          <Link href="/" className="btn" style={{display:'block',textAlign:'center',textDecoration:'none'}}>Return to Lobby</Link>
+          <p style={{marginTop:20,fontSize:11,color:'var(--cream-faint)',lineHeight:1.6}}>Play responsibly. These chips hold no cash value.</p>
         </div>
       </div>
     )
@@ -525,6 +594,11 @@ export default function BlackjackPage() {
           👁 Spectating Live — Read Only
         </div>
       )}
+      {isGuest && (
+        <div style={{ position:'sticky', top:0, zIndex:50, background:'rgba(58,208,122,.1)', borderBottom:'1px solid rgba(58,208,122,.3)', padding:'8px 24px', textAlign:'center', fontFamily:'var(--fs-head)', fontSize:12, letterSpacing:'.12em', color:'#3ad07a', textTransform:'uppercase' }}>
+          🃏 Playing at a friend&apos;s table — same dealer, your own chips
+        </div>
+      )}
 
       <header className="topbar">
         <Link className="back" href="/">← Lobby</Link>
@@ -534,13 +608,9 @@ export default function BlackjackPage() {
         </div>
         <div className="right">
           <button className="btn btn-sm btn-ghost" onClick={() => setShowHelp(true)}>How to Play</button>
-          <button className="btn btn-sm btn-ghost" onClick={() => { setInviteCode(generateCode('blackjack')); setShowInvite(true) }}>Invite</button>
-          <button
-            className="btn btn-sm btn-ghost"
-            style={{fontSize:18, padding:'8px 13px', lineHeight:1, minWidth:0}}
-            onClick={() => { const next = !muted; setMutedUI(next); setMuted(next) }}
-            title={muted ? 'Unmute' : 'Mute'}
-          >{muted ? '🔇' : '🔊'}</button>
+          {!isGuest && !isSpectator && (
+            <button className="btn btn-sm btn-ghost" onClick={() => setShowInvite(true)}>Invite</button>
+          )}
           <div className="balance">
             <div className="coin">H</div>
             <span className="amt tabnum">{fmt(bal)}</span>
@@ -548,151 +618,223 @@ export default function BlackjackPage() {
         </div>
       </header>
 
-      <div className="felt-area felt">
-        <div className="shoe" />
-        <div className="arc-label">
-          Blackjack pays 3 to 2
-          <div className="pay">Insurance not offered</div>
-        </div>
-
-        <div className="zone dealer">
-          <div className="seat-label">Dealer</div>
-          <div className="hand">
-            {dealer.map((c, i) => <PlayingCard key={i} card={c} idx={i} faceDown={hideHole && i === 1} />)}
+      {/* GUEST GAME VIEW */}
+      {isGuest ? (
+        <div className="felt-area felt">
+          <div className="shoe" />
+          <div className="arc-label">
+            Blackjack pays 3 to 2
+            <div className="pay">Playing at friend&apos;s table</div>
           </div>
-          {dealer.length > 0 && <ValBadge cards={dealer} hideHole={hideHole} />}
-        </div>
 
-        {/* Result banner — only show for non-split or when split shows inline */}
-        {result && !isSplit && (
-          <div className="status">
-            <div className={'msg '+result.kind}>{result.msg}</div>
-          </div>
-        )}
-
-        <div className="zone player">
-          {isSplit ? (
-            <div className="split-hands">
-              {/* Main hand */}
-              <div className={'split-hand'+(onSplit ? ' dimmed' : ' active')}>
-                <div className="seat-label">Hand 1 {doubled && !onSplit && '· Doubled'}</div>
-                <div className="hand">
-                  {player.map((c, i) => <PlayingCard key={i} card={c} idx={i} />)}
-                </div>
-                {player.length > 0 && <ValBadge cards={player} hideHole={false} />}
-                {phase === 'done' && result && (
-                  <div className={'result-pill '+result.kind}>{result.msg}{result.net !== 0 ? (result.net > 0 ? ' +'+fmt(result.net) : ' −'+fmt(-result.net)) : ''}</div>
-                )}
-              </div>
-              {/* Split hand */}
-              <div className={'split-hand'+(onSplit ? ' active' : ' dimmed')}>
-                <div className="seat-label">Hand 2</div>
-                <div className="hand">
-                  {splitCards.map((c, i) => <PlayingCard key={i} card={c} idx={i} />)}
-                </div>
-                {splitCards.length > 0 && <ValBadge cards={splitCards} hideHole={false} />}
-                {phase === 'done' && splitResult && (
-                  <div className={'result-pill '+splitResult.kind}>{splitResult.msg}{splitResult.net !== 0 ? (splitResult.net > 0 ? ' +'+fmt(splitResult.net) : ' −'+fmt(-splitResult.net)) : ''}</div>
-                )}
-              </div>
+          <div className="zone dealer">
+            <div className="seat-label">Dealer</div>
+            <div className="hand">
+              {guestDealer.length === 0 && <div style={{color:'var(--cream-faint)',fontFamily:'var(--fs-head)',fontSize:13,letterSpacing:'.1em'}}>Waiting for host to deal…</div>}
+              {guestDealer.map((c, i) => <PlayingCard key={i} card={c} idx={i} faceDown={guestHideHole && i === 1} />)}
             </div>
-          ) : (
-            <>
-              <div className="seat-label">You {doubled && '· Doubled'}</div>
-              <div className="hand">
-                {player.map((c, i) => <PlayingCard key={i} card={c} idx={i} />)}
-              </div>
-              {player.length > 0 && <ValBadge cards={player} hideHole={false} />}
-            </>
+            {guestDealer.length > 0 && <ValBadge cards={guestDealer} hideHole={guestHideHole} />}
+          </div>
+
+          {guestResult && !guestHideHole && (
+            <div className="status">
+              <div className={'msg '+guestResult.kind}>{guestResult.msg}</div>
+            </div>
           )}
-        </div>
-      </div>
 
-      <div className="deck-ctrl">
-        {phase === 'bet' && (
-          <>
-            <div className="bet-disp">
-              <div className="bet-circle">
-                <span className="lbl">Bet</span>
-                <span className="amt tabnum">{bet ? fmtShort(bet) : '—'}</span>
-              </div>
-              {bet > 0 && <button className="btn btn-sm btn-ghost" onClick={() => setBet(0)}>Clear</button>}
+          <div className="zone player">
+            <div className="seat-label">You {guestDoubled && '· Doubled'}</div>
+            <div className="hand">
+              {guestPlayer.map((c, i) => <PlayingCard key={i} card={c} idx={i} />)}
             </div>
-            <div className="vert" />
-            <div className="chip-tray">
-              {CHIPS.map(c => (
-                <div key={c.v} className={'chip'+((c.v > bal-bet) ? ' dis' : '')}
-                  style={{ background: c.color }} onClick={() => addChip(c.v)}>
-                  <span>{c.label}</span>
+            {guestPlayer.length > 0 && <ValBadge cards={guestPlayer} hideHole={false} />}
+          </div>
+        </div>
+      ) : (
+        /* HOST GAME VIEW */
+        <div className="felt-area felt">
+          <div className="shoe" />
+          <div className="arc-label">
+            Blackjack pays 3 to 2
+            <div className="pay">Insurance not offered</div>
+          </div>
+
+          <div className="zone dealer">
+            <div className="seat-label">Dealer</div>
+            <div className="hand">
+              {dealer.map((c, i) => <PlayingCard key={i} card={c} idx={i} faceDown={hideHole && i === 1} />)}
+            </div>
+            {dealer.length > 0 && <ValBadge cards={dealer} hideHole={hideHole} />}
+          </div>
+
+          {result && !isSplit && (
+            <div className="status">
+              <div className={'msg '+result.kind}>{result.msg}</div>
+            </div>
+          )}
+
+          <div className="zone player">
+            {isSplit ? (
+              <div className="split-hands">
+                <div className={'split-hand'+(onSplit ? ' dimmed' : ' active')}>
+                  <div className="seat-label">Hand 1 {doubled && !onSplit && '· Doubled'}</div>
+                  <div className="hand">{player.map((c, i) => <PlayingCard key={i} card={c} idx={i} />)}</div>
+                  {player.length > 0 && <ValBadge cards={player} hideHole={false} />}
+                  {phase === 'done' && result && (
+                    <div className={'result-pill '+result.kind}>{result.msg}{result.net !== 0 ? (result.net > 0 ? ' +'+fmt(result.net) : ' −'+fmt(-result.net)) : ''}</div>
+                  )}
                 </div>
-              ))}
-              <div className="chip" style={{background:'linear-gradient(160deg,#5a3a8a,#3b1d6e)',border:'2px dashed rgba(167,139,250,.6)',fontSize:11}} onClick={() => { setCustomChipVal(''); setShowCustomChip(true) }}>
-                <span>CUST</span>
+                <div className={'split-hand'+(onSplit ? ' active' : ' dimmed')}>
+                  <div className="seat-label">Hand 2</div>
+                  <div className="hand">{splitCards.map((c, i) => <PlayingCard key={i} card={c} idx={i} />)}</div>
+                  {splitCards.length > 0 && <ValBadge cards={splitCards} hideHole={false} />}
+                  {phase === 'done' && splitResult && (
+                    <div className={'result-pill '+splitResult.kind}>{splitResult.msg}{splitResult.net !== 0 ? (splitResult.net > 0 ? ' +'+fmt(splitResult.net) : ' −'+fmt(-splitResult.net)) : ''}</div>
+                  )}
+                </div>
               </div>
-              <div className={'chip'+(bal-bet<=0?' dis':'')} style={{background:'linear-gradient(160deg,#8f0f22,#440b18)',fontSize:10}} onClick={() => { if (bal-bet>0) setBet(bal) }}>
-                <span>ALL IN</span>
+            ) : (
+              <>
+                <div className="seat-label">You {doubled && '· Doubled'}</div>
+                <div className="hand">{player.map((c, i) => <PlayingCard key={i} card={c} idx={i} />)}</div>
+                {player.length > 0 && <ValBadge cards={player} hideHole={false} />}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* CONTROLS */}
+      <div className="deck-ctrl">
+        {isGuest ? (
+          <>
+            {guestPhase === 'betting' && (
+              <>
+                <div className="bet-disp">
+                  <div className="bet-circle">
+                    <span className="lbl">Bet</span>
+                    <span className="amt tabnum">{guestBet ? fmtShort(guestBet) : '—'}</span>
+                  </div>
+                  {guestBet > 0 && <button className="btn btn-sm btn-ghost" onClick={() => setGuestBet(0)}>Clear</button>}
+                </div>
+                <div className="vert" />
+                <div className="chip-tray">
+                  {CHIPS.map(c => (
+                    <div key={c.v} className={'chip'+((c.v > bal-guestBet) ? ' dis' : '')} style={{ background: c.color }} onClick={() => { if (c.v <= bal-guestBet) setGuestBet(b => b + c.v) }}>
+                      <span>{c.label}</span>
+                    </div>
+                  ))}
+                  <div className={'chip'+(bal-guestBet<=0?' dis':'')} style={{background:'linear-gradient(160deg,#8f0f22,#440b18)',fontSize:10}} onClick={() => { if (bal-guestBet>0) setGuestBet(bal) }}>
+                    <span>ALL IN</span>
+                  </div>
+                </div>
+                <div className="vert" />
+                <div className="actions">
+                  <div style={{textAlign:'center',color:'var(--cream-faint)',fontSize:13,fontFamily:'var(--fs-head)',letterSpacing:'.08em'}}>
+                    {guestBet > 0 ? 'Bet set — waiting for host' : 'Set your bet'}
+                  </div>
+                </div>
+              </>
+            )}
+            {guestPhase === 'playing' && (
+              <div className="actions">
+                <button className="btn" onClick={guestHit}>Hit</button>
+                <button className="btn btn-ghost" onClick={guestStand}>Stand</button>
+                {guestPlayer.length === 2 && bal >= guestBet && <button className="btn btn-ghost" onClick={guestDouble}>Double</button>}
               </div>
-            </div>
-            <div className="vert" />
-            <div className="actions">
-              <button className="btn" disabled={bet <= 0} onClick={deal}>Deal</button>
+            )}
+            {guestPhase === 'waiting' && (
+              <div className="seat-label" style={{margin:0,fontSize:14}}>Waiting for dealer…</div>
+            )}
+            {guestPhase === 'done' && (
+              <div className="actions" style={{flexDirection:'column',alignItems:'center'}}>
+                <button className="btn" onClick={guestNewHand}>Next Hand</button>
+                {bal <= 0 && (
+                  <button className="btn btn-ghost btn-sm" style={{marginTop:8}} onClick={async () => {
+                    const res = await fetch('/api/game/session', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ game:'refill', chips_wagered:0, chips_won:100000 }) })
+                    if (res.ok) { const d = await res.json(); setBal(d.chips); showToast('Topped up!','win') }
+                  }}>Out of chips — Refill</button>
+                )}
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            {phase === 'bet' && (
+              <>
+                <div className="bet-disp">
+                  <div className="bet-circle">
+                    <span className="lbl">Bet</span>
+                    <span className="amt tabnum">{bet ? fmtShort(bet) : '—'}</span>
+                  </div>
+                  {bet > 0 && <button className="btn btn-sm btn-ghost" onClick={() => setBet(0)}>Clear</button>}
+                </div>
+                <div className="vert" />
+                <div className="chip-tray">
+                  {CHIPS.map(c => (
+                    <div key={c.v} className={'chip'+((c.v > bal-bet) ? ' dis' : '')} style={{ background: c.color }} onClick={() => addChip(c.v)}>
+                      <span>{c.label}</span>
+                    </div>
+                  ))}
+                  <div className="chip" style={{background:'linear-gradient(160deg,#5a3a8a,#3b1d6e)',border:'2px dashed rgba(167,139,250,.6)',fontSize:11}} onClick={() => { setCustomChipVal(''); setShowCustomChip(true) }}>
+                    <span>CUST</span>
+                  </div>
+                  <div className={'chip'+(bal-bet<=0?' dis':'')} style={{background:'linear-gradient(160deg,#8f0f22,#440b18)',fontSize:10}} onClick={() => { if (bal-bet>0) setBet(bal) }}>
+                    <span>ALL IN</span>
+                  </div>
+                </div>
+                <div className="vert" />
+                <div className="actions">
+                  <button className="btn" disabled={bet <= 0} onClick={deal}>Deal</button>
+                </div>
+              </>
+            )}
+
+            {phase === 'player' && (
+              <div className="actions">
+                <button className="btn" onClick={hit}>Hit</button>
+                <button className="btn btn-ghost" onClick={() => doStand()}>Stand</button>
+                {canDouble && <button className="btn btn-ghost" onClick={doubleDown}>Double</button>}
+                {canSplit  && <button className="btn btn-ghost" onClick={doSplit}>Split</button>}
+              </div>
+            )}
+
+            {(phase === 'deal' || phase === 'dealer') && (
+              <div className="seat-label" style={{margin:0,fontSize:14}}>
+                {phase === 'deal' ? 'Dealing…' : 'Dealer plays…'}
+              </div>
+            )}
+
+            {phase === 'done' && (
+              <div className="actions" style={{flexDirection:'column',alignItems:'center'}}>
+                {autoDeal ? (
+                  <>
+                    {autoCountdown > 0 && (
+                      <div style={{fontFamily:'var(--fs-head)',fontSize:13,color:'var(--cream-dim)',marginBottom:6}}>
+                        Next hand in {(autoCountdown/1000).toFixed(1)}s…
+                      </div>
+                    )}
+                    <button className="btn btn-sm btn-ghost" onClick={() => { clearTimeout(autoTimerRef.current!); clearInterval(autoCountRef.current!); setAutoCountdown(0); newHand() }}>Deal Now</button>
+                  </>
+                ) : (
+                  <button className="btn" onClick={newHand}>Next Hand</button>
+                )}
+                {bal <= 0 && (
+                  <button className="btn btn-ghost btn-sm" style={{marginTop:8}} onClick={async () => {
+                    const res = await fetch('/api/game/session', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ game:'refill', chips_wagered:0, chips_won:100000 }) })
+                    if (res.ok) { const d = await res.json(); setBal(d.chips); showToast('Topped up!','win') }
+                  }}>Out of chips — Refill</button>
+                )}
+              </div>
+            )}
+
+            <div style={{position:'absolute',right:24,bottom:18}}>
+              <button className={'btn btn-sm'+(autoDeal ? '' : ' btn-ghost')} style={{fontSize:11,padding:'7px 14px'}} onClick={() => setAutoDeal(v => !v)}>
+                Auto Deal {autoDeal ? 'ON' : 'OFF'}
+              </button>
             </div>
           </>
         )}
-
-        {phase === 'player' && (
-          <div className="actions">
-            <button className="btn" onClick={hit}>Hit</button>
-            <button className="btn btn-ghost" onClick={() => doStand()}>Stand</button>
-            {canDouble && <button className="btn btn-ghost" onClick={doubleDown}>Double</button>}
-            {canSplit  && <button className="btn btn-ghost" onClick={doSplit}>Split</button>}
-          </div>
-        )}
-
-        {(phase === 'deal' || phase === 'dealer') && (
-          <div className="seat-label" style={{margin:0,fontSize:14}}>
-            {phase === 'deal' ? 'Dealing…' : 'Dealer plays…'}
-          </div>
-        )}
-
-        {phase === 'done' && (
-          <div className="actions" style={{flexDirection:'column',alignItems:'center'}}>
-            {autoDeal ? (
-              <>
-                {autoCountdown > 0 && (
-                  <div style={{fontFamily:'var(--fs-head)',fontSize:13,color:'var(--cream-dim)',marginBottom:6}}>
-                    Next hand in {(autoCountdown/1000).toFixed(1)}s…
-                  </div>
-                )}
-                <button className="btn btn-sm btn-ghost" onClick={() => {
-                  clearTimeout(autoTimerRef.current!); clearInterval(autoCountRef.current!)
-                  setAutoCountdown(0); newHand()
-                }}>Deal Now</button>
-              </>
-            ) : (
-              <button className="btn" onClick={newHand}>Next Hand</button>
-            )}
-            {bal <= 0 && (
-              <button className="btn btn-ghost btn-sm" style={{marginTop:8}} onClick={async () => {
-                const res = await fetch('/api/game/session', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ game:'refill', chips_wagered:0, chips_won:100000 }) })
-                if (res.ok) { const d = await res.json(); setBal(d.chips); showToast('Topped up!','win') }
-              }}>
-                Out of chips — Refill
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Auto Deal toggle — always visible */}
-        <div style={{position:'absolute',right:24,bottom:18}}>
-          <button
-            className={'btn btn-sm'+(autoDeal ? '' : ' btn-ghost')}
-            style={{fontSize:11,padding:'7px 14px'}}
-            onClick={() => setAutoDeal(v => !v)}
-          >
-            Auto Deal {autoDeal ? 'ON' : 'OFF'}
-          </button>
-        </div>
       </div>
 
       {showCustomChip && (
@@ -701,26 +843,8 @@ export default function BlackjackPage() {
             <button className="x" onClick={() => setShowCustomChip(false)}>×</button>
             <h2 className="gold-text" style={{marginBottom:6}}>Custom Bet</h2>
             <p style={{marginBottom:16}}>Type any amount to add to your bet.</p>
-            <input
-              type="number"
-              value={customChipVal}
-              onChange={e => setCustomChipVal(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') {
-                  const v = parseInt(customChipVal, 10)
-                  if (v > 0) addChip(Math.min(v, bal - bet))
-                  setShowCustomChip(false)
-                }
-              }}
-              placeholder="e.g. 7500"
-              style={{width:'100%',background:'rgba(0,0,0,.4)',border:'1px solid rgba(217,182,90,.35)',borderRadius:10,padding:'10px 14px',color:'var(--gold-l)',fontSize:20,fontFamily:'var(--fs-head)',letterSpacing:'.06em',outline:'none',boxSizing:'border-box' as const}}
-              autoFocus
-            />
-            <button className="btn" style={{width:'100%',marginTop:14}} onClick={() => {
-              const v = parseInt(customChipVal, 10)
-              if (v > 0) addChip(Math.min(v, bal - bet))
-              setShowCustomChip(false)
-            }}>Add to Bet</button>
+            <input type="number" value={customChipVal} onChange={e => setCustomChipVal(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { const v = parseInt(customChipVal, 10); if (v > 0) addChip(Math.min(v, bal - bet)); setShowCustomChip(false) } }} placeholder="e.g. 7500" style={{width:'100%',background:'rgba(0,0,0,.4)',border:'1px solid rgba(217,182,90,.35)',borderRadius:10,padding:'10px 14px',color:'var(--gold-l)',fontSize:20,fontFamily:'var(--fs-head)',letterSpacing:'.06em',outline:'none',boxSizing:'border-box' as const}} autoFocus />
+            <button className="btn" style={{width:'100%',marginTop:14}} onClick={() => { const v = parseInt(customChipVal, 10); if (v > 0) addChip(Math.min(v, bal - bet)); setShowCustomChip(false) }}>Add to Bet</button>
           </div>
         </div>
       )}
@@ -730,12 +854,12 @@ export default function BlackjackPage() {
           <div className="modal gilt" onClick={e => e.stopPropagation()}>
             <button className="x" onClick={() => setShowInvite(false)}>×</button>
             <h2 className="gold-text">Invite to your table</h2>
-            <p>Share this code with a friend and they&apos;ll join your Blackjack table.</p>
+            <p>Share this code — friends who join will play against the same dealer with their own chips.</p>
             <div style={{textAlign:'center',margin:'18px 0'}}>
-              <div style={{fontFamily:'var(--fs-head)',fontSize:36,fontWeight:800,letterSpacing:'.15em',color:'var(--gold-l)',background:'rgba(0,0,0,.4)',border:'1px solid rgba(217,182,90,.3)',borderRadius:14,padding:'18px 28px',display:'inline-block'}}>{prettyCode(inviteCode)}</div>
+              <div style={{fontFamily:'var(--fs-head)',fontSize:36,fontWeight:800,letterSpacing:'.15em',color:'var(--gold-l)',background:'rgba(0,0,0,.4)',border:'1px solid rgba(217,182,90,.3)',borderRadius:14,padding:'18px 28px',display:'inline-block'}}>{prettyCode(roomCodeRef.current)}</div>
             </div>
             <div className="invite-field">
-              <button className="btn" style={{flex:1}} onClick={() => { navigator.clipboard.writeText(prettyCode(inviteCode)).then(() => showToast('Code copied!','win')) }}>Copy Code</button>
+              <button className="btn" style={{flex:1}} onClick={() => { navigator.clipboard.writeText(prettyCode(roomCodeRef.current)).then(() => showToast('Code copied!','win')) }}>Copy Code</button>
             </div>
             <div className="seatnote">Dealer stands on 17 · Blackjack pays 3:2. Your chips carry across every HouseTables table.</div>
           </div>
@@ -761,6 +885,7 @@ export default function BlackjackPage() {
                 </ul>
               </div>
               <p><strong style={{color:'var(--cream)'}}>Dealer Rules:</strong> The dealer must hit until reaching 17 or higher, then must stand.</p>
+              <p><strong style={{color:'var(--cream)'}}>Multiplayer:</strong> Use Invite to share a code. Friends join and play against the same dealer — everyone wins or loses on their own.</p>
               <p><strong style={{color:'var(--cream)'}}>Auto Deal:</strong> Toggle Auto Deal ON to automatically start the next hand using the same bet amount.</p>
             </div>
           </div>
@@ -799,7 +924,6 @@ export default function BlackjackPage() {
         .status .msg.win  { background:var(--gold-grad);color:#2a1f08;box-shadow:0 14px 50px rgba(0,0,0,.6); }
         .status .msg.lose { background:linear-gradient(160deg,#6a1325,#440b18);color:var(--cream);border:1px solid rgba(217,182,90,.4); }
         .status .msg.push { background:linear-gradient(180deg,#241f15,#0b0a07);color:var(--gold-l);border:1px solid rgba(217,182,90,.4); }
-        /* Split layout */
         .split-hands { display:flex;gap:36px;align-items:flex-end;padding-bottom:4px; }
         .split-hand { display:flex;flex-direction:column;align-items:center;padding:10px 14px;border-radius:18px;border:2px solid transparent;transition:.3s; }
         .split-hand.active { border-color:rgba(217,182,90,.6);background:rgba(217,182,90,.06); }
@@ -808,7 +932,6 @@ export default function BlackjackPage() {
         .result-pill.win  { background:var(--gold-grad);color:#2a1f08; }
         .result-pill.lose { background:linear-gradient(160deg,#6a1325,#440b18);color:var(--cream);border:1px solid rgba(217,182,90,.3); }
         .result-pill.push { background:rgba(0,0,0,.5);color:var(--gold-l);border:1px solid rgba(217,182,90,.4); }
-        /* Controls */
         .deck-ctrl { padding:14px 24px 22px;display:flex;align-items:center;justify-content:center;gap:30px;z-index:20;min-height:118px;position:relative; }
         .bet-disp { display:flex;flex-direction:column;align-items:center;gap:8px;min-width:120px; }
         .bet-circle { width:88px;height:88px;border-radius:50%;border:2px dashed rgba(217,182,90,.5);display:flex;align-items:center;justify-content:center;flex-direction:column;background:radial-gradient(circle,rgba(217,182,90,.08),transparent); }
@@ -829,6 +952,10 @@ export default function BlackjackPage() {
         .modal .x { position:absolute;top:16px;right:18px;background:none;border:none;color:var(--cream-faint);font-size:24px;cursor:pointer;line-height:1; }
         .modal .x:hover { color:var(--gold-l); }
         .seatnote { margin-top:18px;font-size:12px;color:var(--cream-faint);line-height:1.5;border-top:1px solid rgba(217,182,90,.15);padding-top:14px; }
+        @keyframes dealIn {
+          from { transform: translate(var(--fromX), var(--fromY)) rotate(-12deg); opacity: 0; }
+          to   { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+        }
         @media (max-width: 640px) {
           .topbar { padding: 10px 14px !important; gap: 8px !important; }
           .topbar .title-c .t { font-size: 18px !important; }
@@ -837,7 +964,6 @@ export default function BlackjackPage() {
           .deck-ctrl { padding: 10px 14px 16px !important; gap: 14px !important; flex-wrap: wrap; justify-content: center; }
           .hand { gap: 6px !important; min-height: 95px !important; }
           .felt-area { border-radius: 18px !important; margin: 0 10px 10px !important; }
-          .result-banner { font-size: 20px !important; }
         }
       `}</style>
     </div>

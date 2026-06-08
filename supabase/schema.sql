@@ -59,6 +59,26 @@ create policy "Hosts can manage own rooms" on public.game_rooms
 create policy "Service role can do everything on rooms" on public.game_rooms
   for all using (auth.role() = 'service_role');
 
+-- friendships table (bidirectional: A→B and B→A both stored)
+create table public.friendships (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references public.profiles(id) on delete cascade,
+  friend_id uuid references public.profiles(id) on delete cascade,
+  created_at timestamptz default now(),
+  unique(user_id, friend_id)
+);
+
+alter table public.friendships enable row level security;
+
+create policy "Users can view own friendships" on public.friendships
+  for select using (auth.uid() = user_id);
+create policy "Users can insert own friendships" on public.friendships
+  for insert with check (auth.uid() = user_id);
+create policy "Users can delete own friendships" on public.friendships
+  for delete using (auth.uid() = user_id);
+create policy "Service role can do everything on friendships" on public.friendships
+  for all using (auth.role() = 'service_role');
+
 -- admin_settings table
 create table public.admin_settings (
   key text primary key,

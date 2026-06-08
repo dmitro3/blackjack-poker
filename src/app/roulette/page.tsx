@@ -4,7 +4,6 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { playChip, playWin, playLose, startTension, stopTension, setMuted } from '@/lib/casino-sounds'
 import { generateCode, prettyCode } from '@/lib/invite-codes'
 
 const DIRECTOR_EMAIL = 'vedantbhatia8@gmail.com'
@@ -47,27 +46,17 @@ function WinLimitModal({ amount, onLeave }: { amount: number; onLeave: () => voi
         <h2 style={{ fontFamily:'var(--fs-head)', fontWeight:700, fontSize:24, color:'var(--gold-l)', margin:'0 0 12px', letterSpacing:'.04em' }}>{isKicked ? 'Removed by Admin' : 'Table Limit Reached'}</h2>
         {isKicked ? (
           <>
-            <p style={{ color:'var(--cream-dim)', fontSize:15, lineHeight:1.6, margin:'0 0 10px' }}>
-              An admin has removed you from this table.
-            </p>
-            <p style={{ color:'var(--cream-faint)', fontSize:13, lineHeight:1.5, margin:'0 0 28px' }}>
-              You&apos;ll be locked out of Roulette for 10 minutes.
-            </p>
+            <p style={{ color:'var(--cream-dim)', fontSize:15, lineHeight:1.6, margin:'0 0 10px' }}>An admin has removed you from this table.</p>
+            <p style={{ color:'var(--cream-faint)', fontSize:13, lineHeight:1.5, margin:'0 0 28px' }}>You&apos;ll be locked out of Roulette for 10 minutes.</p>
           </>
         ) : (
           <>
-            <p style={{ color:'var(--cream-dim)', fontSize:15, lineHeight:1.6, margin:'0 0 10px' }}>
-              You&apos;ve won <strong style={{ color:'var(--gold-l)', fontVariantNumeric:'tabular-nums' }}>{Number(amount).toLocaleString('en-US')}</strong> chips in a single spin — congratulations!
-            </p>
-            <p style={{ color:'var(--cream-faint)', fontSize:13, lineHeight:1.5, margin:'0 0 28px' }}>
-              For fairness, you&apos;re being asked to leave the table. You&apos;ll be locked out of Roulette for 10 minutes.
-            </p>
+            <p style={{ color:'var(--cream-dim)', fontSize:15, lineHeight:1.6, margin:'0 0 10px' }}>You&apos;ve won <strong style={{ color:'var(--gold-l)', fontVariantNumeric:'tabular-nums' }}>{Number(amount).toLocaleString('en-US')}</strong> chips in a single spin — congratulations!</p>
+            <p style={{ color:'var(--cream-faint)', fontSize:13, lineHeight:1.5, margin:'0 0 28px' }}>For fairness, you&apos;re being asked to leave the table. You&apos;ll be locked out of Roulette for 10 minutes.</p>
           </>
         )}
         <div style={{ width:64, height:64, borderRadius:'50%', background:'rgba(217,182,90,.12)', border:'2px solid rgba(217,182,90,.4)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 24px', fontFamily:'var(--fs-display)', fontWeight:900, fontSize:22, color:'var(--gold-l)' }}>{count}</div>
-        <button onClick={onLeave} style={{ padding:'14px 40px', borderRadius:12, border:'none', cursor:'pointer', background:'var(--gold-grad)', color:'#2a1f08', fontFamily:'var(--fs-head)', fontWeight:700, fontSize:14, letterSpacing:'.1em', textTransform:'uppercase', boxShadow:'0 8px 24px rgba(217,182,90,.4)' }}>
-          Leave Table
-        </button>
+        <button onClick={onLeave} style={{ padding:'14px 40px', borderRadius:12, border:'none', cursor:'pointer', background:'var(--gold-grad)', color:'#2a1f08', fontFamily:'var(--fs-head)', fontWeight:700, fontSize:14, letterSpacing:'.1em', textTransform:'uppercase', boxShadow:'0 8px 24px rgba(217,182,90,.4)' }}>Leave Table</button>
       </div>
     </div>
   )
@@ -87,10 +76,9 @@ export default function RoulettePage() {
   const [showCustomChip, setShowCustomChip] = useState(false)
   const [customChipVal, setCustomChipVal] = useState('')
   const [customChipAmount, setCustomChipAmount] = useState(0)
-  const [inviteCode, setInviteCode] = useState('')
   const [loading, setLoading] = useState(true)
-  const [muted, setMutedUI] = useState(false)
   const [isSpectator, setIsSpectator] = useState(false)
+  const [isGuest, setIsGuest] = useState(false)
   const [userEmail, setUserEmail] = useState('')
   const wheelRef = useRef<HTMLDivElement>(null)
   const ballRef = useRef<HTMLDivElement>(null)
@@ -98,17 +86,16 @@ export default function RoulettePage() {
   const roomCodeRef = useRef('')
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const isSpectatorRef = useRef(false)
+  const isGuestRef = useRef(false)
   const lastWinRef = useRef<{num:number,net:number}|null>(null)
+  const betsRef = useRef<Record<string, number>>({})
   const router = useRouter()
   const supabase = createClient()
 
-  useEffect(() => {
-    try { setMutedUI(localStorage.getItem('casinoMuted') === '1') } catch {}
-  }, [])
+  useEffect(() => { betsRef.current = bets }, [bets])
 
   useEffect(() => {
     async function init() {
-      // Check roulette ban
       try {
         const banUntil = parseInt(localStorage.getItem('roulette_ban_until') || '0', 10)
         if (Date.now() < banUntil) { router.push('/'); return }
@@ -118,9 +105,49 @@ export default function RoulettePage() {
       if (user.email) setUserEmail(user.email)
 
       const params = new URLSearchParams(window.location.search)
+      const jc = params.get('join')
       const sc = params.get('spectate')
 
-      if (sc) {
+      if (jc) {
+        // Guest player — can bet, cannot spin
+        isGuestRef.current = true
+        setIsGuest(true)
+        const { data: profile } = await supabase.from('profiles').select('chips').eq('id', user.id).single()
+        if (profile) setBal(profile.chips)
+
+        const ch = supabase.channel(`ht-game-${jc.toUpperCase()}`, { config: { broadcast: { self: false } } })
+        ch.on('broadcast', { event: 'SPIN_START' }, () => { setSpinning(true); setWin(null) })
+          .on('broadcast', { event: 'SPIN_END' }, ({ payload }) => {
+            const p = payload as { num?: number }
+            if (p.num === undefined) return
+            const w = p.num
+            const curBets = betsRef.current
+            const wagered = Object.values(curBets).reduce((a, b) => a+b, 0)
+            let winnings = 0
+            Object.keys(curBets).forEach(k => { if (betWins(k, w)) winnings += curBets[k]*mult(k) })
+            const net = winnings - wagered
+            setBal(b => b + winnings)
+            setWin({ num: w, net })
+            setSpinning(false)
+            setBets({})
+            const label = w===0?'Zero':(colOf(w)==='red'?'Red ':'Black ')+w
+            setToast({ msg: label+(net>0?'  +'+fmt(net):net<0?'  −'+fmt(wagered):''), kind: net>0?'win':(net<0?'lose':'') })
+            if (wagered > 0) {
+              fetch('/api/game/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ game: 'roulette', chips_wagered: wagered, chips_won: winnings }) }).catch(() => {})
+            }
+          })
+          .on('broadcast', { event: 'ADMIN_KICK' }, () => {
+            try { localStorage.setItem('roulette_ban_until', String(Date.now() + 10 * 60 * 1000)) } catch {}
+            setWinLimitAmount(0)
+            setShowWinLimit(true)
+          })
+          .subscribe(status => {
+            if (status === 'SUBSCRIBED') ch.send({ type: 'broadcast', event: 'PLAYER_JOIN', payload: {} }).catch(() => {})
+          })
+        channelRef.current = ch
+
+      } else if (sc) {
+        // Read-only spectator
         isSpectatorRef.current = true
         setIsSpectator(true)
         const ch = supabase.channel(`ht-game-${sc.toUpperCase()}`)
@@ -133,7 +160,9 @@ export default function RoulettePage() {
             if (status === 'SUBSCRIBED') ch.send({ type: 'broadcast', event: 'SPECTATOR_JOIN', payload: {} }).catch(() => {})
           })
         channelRef.current = ch
+
       } else {
+        // Host — solo or inviting guests
         const { data: profile } = await supabase.from('profiles').select('chips').eq('id', user.id).single()
         if (profile) setBal(profile.chips)
         const code = generateCode('roulette')
@@ -164,7 +193,6 @@ export default function RoulettePage() {
   function place(key: string) {
     if (spinning) return
     if (bal < chip) { showToast('Not enough chips'); return }
-    playChip()
     setBal(b => b - chip)
     setBets(b => ({ ...b, [key]: (b[key]||0)+chip }))
     setWin(null)
@@ -203,11 +231,9 @@ export default function RoulettePage() {
   }
 
   async function spin() {
-    if (spinning || total === 0) return
-    if (isSpectatorRef.current) return
+    if (spinning || total === 0 || isGuestRef.current || isSpectatorRef.current) return
     setSpinning(true); setWin(null)
     channelRef.current?.send({ type: 'broadcast', event: 'SPIN_START', payload: {} }).catch(() => {})
-    startTension()
     const idx = Math.floor(Math.random() * WHEEL.length)
     const w = WHEEL[idx]
     const target = 360*6 - idx*SEG - rotRef.current%360
@@ -221,33 +247,22 @@ export default function RoulettePage() {
       let winnings = 0
       const wagered = total
       Object.keys(bets).forEach(k => { if (betWins(k, w)) winnings += bets[k]*mult(k) })
-
-      stopTension()
       setBal(b => b + winnings)
       const net = winnings - wagered
       setWin({ num: w, net })
       lastWinRef.current = { num: w, net }
       setSpinning(false)
-      if (net > 0) playWin(); else if (net < 0) playLose()
       const label = w===0?'Zero':(colOf(w)==='red'?'Red ':'Black ')+w
       showToast(label+(net>0?'  +'+fmt(net):net<0?'  −'+fmt(wagered):''), net>0?'win':(net<0?'lose':''))
       setBets({})
-
       channelRef.current?.send({ type: 'broadcast', event: 'SPIN_END', payload: { num: w, net } }).catch(() => {})
-
       if (net >= 1_000_000) {
         try { localStorage.setItem('roulette_ban_until', String(Date.now() + 10 * 60 * 1000)) } catch {}
         setWinLimitAmount(net)
         setTimeout(() => setShowWinLimit(true), 2500)
       }
-
-      // Log to Supabase
       try {
-        await fetch('/api/game/session', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ game: 'roulette', chips_wagered: wagered, chips_won: winnings }),
-        })
+        await fetch('/api/game/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ game: 'roulette', chips_wagered: wagered, chips_won: winnings }) })
       } catch { /* best effort */ }
     }, 5500)
   }
@@ -278,9 +293,9 @@ export default function RoulettePage() {
     </div>
   )
 
-  function leaveTable() {
-    router.push('/')
-  }
+  function leaveTable() { router.push('/') }
+
+  const canInteract = !isSpectator
 
   return (
     <div className="table-wrap">
@@ -295,13 +310,9 @@ export default function RoulettePage() {
         </div>
         <div className="right">
           <button className="btn btn-sm btn-ghost rlt-desk" onClick={() => setShowHelp(true)}>How to Play</button>
-          <button className="btn btn-sm btn-ghost rlt-desk" onClick={() => { setInviteCode(generateCode('roulette')); setShowInvite(true) }}>Invite</button>
-          <button
-            className="btn btn-sm btn-ghost"
-            style={{fontSize:18, padding:'8px 13px', lineHeight:1, minWidth:0}}
-            onClick={() => { const next = !muted; setMutedUI(next); setMuted(next) }}
-            title={muted ? 'Unmute' : 'Mute'}
-          >{muted ? '🔇' : '🔊'}</button>
+          {!isGuest && !isSpectator && (
+            <button className="btn btn-sm btn-ghost rlt-desk" onClick={() => setShowInvite(true)}>Invite</button>
+          )}
           <div className="balance">
             <div className="coin">H</div>
             <span className="amt tabnum">{fmt(bal)}</span>
@@ -313,19 +324,23 @@ export default function RoulettePage() {
         <div style={{ background:'rgba(217,182,90,.12)', border:'1px solid rgba(217,182,90,.35)', borderRadius:999, padding:'7px 20px', textAlign:'center', margin:'0 22px', fontFamily:'var(--fs-head)', fontSize:12, letterSpacing:'.12em', color:'var(--gold-l)', textTransform:'uppercase', display:'flex', alignItems:'center', justifyContent:'center', gap:16 }}>
           <span>👁 Spectating Live — Read Only</span>
           {userEmail === DIRECTOR_EMAIL && (
-            <button
-              onClick={() => channelRef.current?.send({ type:'broadcast', event:'ADMIN_KICK', payload:{} }).catch(() => {})}
-              style={{ padding:'5px 16px', background:'#b91c1c', border:'1px solid #ef4444', borderRadius:999, cursor:'pointer', color:'#fff', fontFamily:'var(--fs-head)', fontSize:10, letterSpacing:'.12em', textTransform:'uppercase', fontWeight:700 }}
-            >
+            <button onClick={() => channelRef.current?.send({ type:'broadcast', event:'ADMIN_KICK', payload:{} }).catch(() => {})} style={{ padding:'5px 16px', background:'#b91c1c', border:'1px solid #ef4444', borderRadius:999, cursor:'pointer', color:'#fff', fontFamily:'var(--fs-head)', fontSize:10, letterSpacing:'.12em', textTransform:'uppercase', fontWeight:700 }}>
               Kick Player
             </button>
           )}
         </div>
       )}
 
+      {isGuest && (
+        <div style={{ background:'rgba(58,208,122,.1)', border:'1px solid rgba(58,208,122,.3)', borderRadius:999, padding:'7px 20px', textAlign:'center', margin:'0 22px', fontFamily:'var(--fs-head)', fontSize:12, letterSpacing:'.12em', color:'#3ad07a', textTransform:'uppercase' }}>
+          🎲 Joined Table — Place your bets before the host spins
+        </div>
+      )}
+
       <div className="stage" style={isSpectator ? { pointerEvents: 'none' } : undefined}>
         <div className="wheel-side">
           <div className="wheel-housing" onClick={() => {
+            if (!canInteract || isGuest) return
             if (spinning) return
             if (total === 0) { showToast('Place a bet first', ''); return }
             spin()
@@ -347,7 +362,7 @@ export default function RoulettePage() {
             </div>
             <div className="hub" />
             <div className="ball" ref={ballRef} />
-            {!spinning && <div className="tap-spin-hint" aria-hidden="true">{total > 0 ? 'TAP' : 'BET'}</div>}
+            {!spinning && !isGuest && !isSpectator && <div className="tap-spin-hint" aria-hidden="true">{total > 0 ? 'TAP' : 'BET'}</div>}
           </div>
           <div className="result-disp">
             {win ? (
@@ -368,7 +383,7 @@ export default function RoulettePage() {
         <div className="board-side">
           <div className="board-scroll">
             <div className="board">
-              <div className="cell zero green" onClick={() => place('n-0')} style={{position:'relative'}}>
+              <div className="cell zero green" onClick={() => canInteract && place('n-0')} style={{position:'relative'}}>
                 0<Chip k="n-0" bg="#137a4a" />
               </div>
               <div style={{flex:1,display:'flex',flexDirection:'column'}}>
@@ -376,23 +391,23 @@ export default function RoulettePage() {
                   <div className="numbers" style={{flex:1}}>{numCells}</div>
                   <div className="colbets">
                     {[1,2,3].map(c => (
-                      <div key={c} className="cell" onClick={() => place('col-'+c)}>2:1<Chip k={'col-'+c}/></div>
+                      <div key={c} className="cell" onClick={() => canInteract && place('col-'+c)}>2:1<Chip k={'col-'+c}/></div>
                     ))}
                   </div>
                 </div>
                 <div className="lower">
                   <div className="dozens">
-                    <div className="cell" onClick={() => place('dozen-1')}>1st 12<Chip k="dozen-1"/></div>
-                    <div className="cell" onClick={() => place('dozen-2')}>2nd 12<Chip k="dozen-2"/></div>
-                    <div className="cell" onClick={() => place('dozen-3')}>3rd 12<Chip k="dozen-3"/></div>
+                    <div className="cell" onClick={() => canInteract && place('dozen-1')}>1st 12<Chip k="dozen-1"/></div>
+                    <div className="cell" onClick={() => canInteract && place('dozen-2')}>2nd 12<Chip k="dozen-2"/></div>
+                    <div className="cell" onClick={() => canInteract && place('dozen-3')}>3rd 12<Chip k="dozen-3"/></div>
                   </div>
                   <div className="outside">
-                    <div className="cell" onClick={() => place('low')}>1–18<Chip k="low"/></div>
-                    <div className="cell" onClick={() => place('even')}>EVEN<Chip k="even"/></div>
-                    <div className="cell red" onClick={() => place('red')}>RED<Chip k="red" bg="#8f0f22"/></div>
-                    <div className="cell black" onClick={() => place('black')}>BLACK<Chip k="black" bg="#000"/></div>
-                    <div className="cell" onClick={() => place('odd')}>ODD<Chip k="odd"/></div>
-                    <div className="cell" onClick={() => place('high')}>19–36<Chip k="high"/></div>
+                    <div className="cell" onClick={() => canInteract && place('low')}>1–18<Chip k="low"/></div>
+                    <div className="cell" onClick={() => canInteract && place('even')}>EVEN<Chip k="even"/></div>
+                    <div className="cell red" onClick={() => canInteract && place('red')}>RED<Chip k="red" bg="#8f0f22"/></div>
+                    <div className="cell black" onClick={() => canInteract && place('black')}>BLACK<Chip k="black" bg="#000"/></div>
+                    <div className="cell" onClick={() => canInteract && place('odd')}>ODD<Chip k="odd"/></div>
+                    <div className="cell" onClick={() => canInteract && place('high')}>19–36<Chip k="high"/></div>
                   </div>
                 </div>
               </div>
@@ -401,26 +416,30 @@ export default function RoulettePage() {
           <div className="ctrl">
             <div className="chip-sel">
               {CHIPS_DEF.map(c => (
-                <div key={c.v} className={'chip'+(chip===c.v?' sel':'')} style={{background:c.color}} onClick={() => setChip(c.v)}>
+                <div key={c.v} className={'chip'+(chip===c.v?' sel':'')} style={{background:c.color}} onClick={() => canInteract && setChip(c.v)}>
                   <span>{c.label}</span>
                 </div>
               ))}
               {customChipAmount > 0 && (
-                <div className={'chip'+(chip===customChipAmount?' sel':'')} style={{background:'linear-gradient(160deg,#5a3a8a,#3b1d6e)'}} onClick={() => setChip(customChipAmount)}>
+                <div className={'chip'+(chip===customChipAmount?' sel':'')} style={{background:'linear-gradient(160deg,#5a3a8a,#3b1d6e)'}} onClick={() => canInteract && setChip(customChipAmount)}>
                   <span>{fmtShort(customChipAmount)}</span>
                 </div>
               )}
-              <div className="chip" style={{background:'linear-gradient(160deg,#5a3a8a,#2d155c)',border:'2px dashed rgba(167,139,250,.6)',fontSize:11}} onClick={() => { setCustomChipVal(''); setShowCustomChip(true) }}>
+              <div className="chip" style={{background:'linear-gradient(160deg,#5a3a8a,#2d155c)',border:'2px dashed rgba(167,139,250,.6)',fontSize:11}} onClick={() => canInteract && (setCustomChipVal(''), setShowCustomChip(true))}>
                 <span>CUST</span>
               </div>
-              <div className={'chip'+(chip===bal?' sel':'')} style={{background:'linear-gradient(160deg,#8f0f22,#440b18)',fontSize:10}} onClick={() => setChip(bal)}>
+              <div className={'chip'+(chip===bal?' sel':'')} style={{background:'linear-gradient(160deg,#8f0f22,#440b18)',fontSize:10}} onClick={() => canInteract && setChip(bal)}>
                 <span>ALL IN</span>
               </div>
             </div>
             <div className="ctrl-right">
               <span className="total-bet">In play <b className="tabnum">{fmt(total)}</b></span>
               <button className="btn btn-ghost btn-sm" onClick={clearAll} disabled={spinning||total===0}>Clear</button>
-              <button className="btn" onClick={spin} disabled={spinning||total===0}>Spin</button>
+              {isGuest ? (
+                <button className="btn" disabled style={{opacity:.5}}>Host spins</button>
+              ) : (
+                <button className="btn" onClick={spin} disabled={spinning||total===0}>Spin</button>
+              )}
             </div>
           </div>
         </div>
@@ -432,26 +451,8 @@ export default function RoulettePage() {
             <button className="x" onClick={() => setShowCustomChip(false)}>×</button>
             <h2 className="gold-text" style={{marginBottom:6}}>Custom Chip</h2>
             <p style={{marginBottom:16}}>Enter any amount to use as your chip value.</p>
-            <input
-              type="number"
-              value={customChipVal}
-              onChange={e => setCustomChipVal(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') {
-                  const v = parseInt(customChipVal, 10)
-                  if (v > 0) { setCustomChipAmount(v); setChip(v) }
-                  setShowCustomChip(false)
-                }
-              }}
-              placeholder="e.g. 7500"
-              style={{width:'100%',background:'rgba(0,0,0,.4)',border:'1px solid rgba(217,182,90,.35)',borderRadius:10,padding:'10px 14px',color:'var(--gold-l)',fontSize:20,fontFamily:'var(--fs-head)',letterSpacing:'.06em',outline:'none',boxSizing:'border-box' as const}}
-              autoFocus
-            />
-            <button className="btn" style={{width:'100%',marginTop:14}} onClick={() => {
-              const v = parseInt(customChipVal, 10)
-              if (v > 0) { setCustomChipAmount(v); setChip(v) }
-              setShowCustomChip(false)
-            }}>Set Chip</button>
+            <input type="number" value={customChipVal} onChange={e => setCustomChipVal(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { const v = parseInt(customChipVal, 10); if (v > 0) { setCustomChipAmount(v); setChip(v) } setShowCustomChip(false) } }} placeholder="e.g. 7500" style={{width:'100%',background:'rgba(0,0,0,.4)',border:'1px solid rgba(217,182,90,.35)',borderRadius:10,padding:'10px 14px',color:'var(--gold-l)',fontSize:20,fontFamily:'var(--fs-head)',letterSpacing:'.06em',outline:'none',boxSizing:'border-box' as const}} autoFocus />
+            <button className="btn" style={{width:'100%',marginTop:14}} onClick={() => { const v = parseInt(customChipVal, 10); if (v > 0) { setCustomChipAmount(v); setChip(v) } setShowCustomChip(false) }}>Set Chip</button>
           </div>
         </div>
       )}
@@ -461,12 +462,12 @@ export default function RoulettePage() {
           <div className="modal gilt" onClick={e => e.stopPropagation()}>
             <button className="x" onClick={() => setShowInvite(false)}>×</button>
             <h2 className="gold-text">Invite to the wheel</h2>
-            <p>Share this code with a friend and they&apos;ll join your Roulette table.</p>
+            <p>Share this code — friends who enter it will join your table and can bet on the same spins.</p>
             <div style={{textAlign:'center',margin:'18px 0'}}>
-              <div style={{fontFamily:'var(--fs-head)',fontSize:36,fontWeight:800,letterSpacing:'.15em',color:'var(--gold-l)',background:'rgba(0,0,0,.4)',border:'1px solid rgba(217,182,90,.3)',borderRadius:14,padding:'18px 28px',display:'inline-block'}}>{prettyCode(inviteCode)}</div>
+              <div style={{fontFamily:'var(--fs-head)',fontSize:36,fontWeight:800,letterSpacing:'.15em',color:'var(--gold-l)',background:'rgba(0,0,0,.4)',border:'1px solid rgba(217,182,90,.3)',borderRadius:14,padding:'18px 28px',display:'inline-block'}}>{prettyCode(roomCodeRef.current)}</div>
             </div>
             <div className="invite-field">
-              <button className="btn" style={{flex:1}} onClick={() => { navigator.clipboard.writeText(prettyCode(inviteCode)).then(() => showToast('Code copied!','win')) }}>Copy Code</button>
+              <button className="btn" style={{flex:1}} onClick={() => { navigator.clipboard.writeText(prettyCode(roomCodeRef.current)).then(() => showToast('Code copied!','win')) }}>Copy Code</button>
             </div>
             <div className="seatnote">European single-zero · Your chips carry across every HouseTables table.</div>
           </div>
@@ -492,7 +493,7 @@ export default function RoulettePage() {
                   ))}
                 </div>
               </div>
-              <p><strong style={{color:'var(--cream)'}}>How to Bet:</strong> Select a chip size on the left, then click any spot on the board to place that chip. You can stack multiple chips on different spots before spinning.</p>
+              <p><strong style={{color:'var(--cream)'}}>Multiplayer:</strong> Use the Invite button to share a code with friends. They can join your table and place their own bets — each player wins or loses independently.</p>
               <p><strong style={{color:'var(--cream)'}}>Note:</strong> If the ball lands on 0, only straight-up bets on 0 win. All other bets lose.</p>
             </div>
           </div>
@@ -560,10 +561,6 @@ export default function RoulettePage() {
         .invite-field input { flex:1;background:rgba(0,0,0,.4);border:1px solid rgba(217,182,90,.3);border-radius:10px;padding:0 14px;color:var(--gold-l);font-size:13px;height:46px; }
         .modal .x { position:absolute;top:16px;right:18px;background:none;border:none;color:var(--cream-faint);font-size:24px;cursor:pointer;line-height:1; }
         .seatnote { margin-top:18px;font-size:12px;color:var(--cream-faint);line-height:1.5;border-top:1px solid rgba(217,182,90,.15);padding-top:14px; }
-        @keyframes tapPulse {
-          0%,100% { transform:translate(-50%,-50%) scale(1); opacity:.7; }
-          50% { transform:translate(-50%,-50%) scale(1.22); opacity:1; }
-        }
         @media (max-width:640px) {
           html,body { overflow:hidden !important; }
           .table-wrap { height:100svh !important; overflow:hidden !important; display:flex !important; flex-direction:column !important; }
@@ -573,33 +570,24 @@ export default function RoulettePage() {
           .topbar .title-c .s { display:none !important; }
           .topbar .right { gap:8px !important; }
 
-          /* Stage: vertical flex, fills remaining height */
           .stage {
-            flex:1 !important;
-            display:flex !important;
-            flex-direction:column !important;
-            gap:0 !important;
-            padding:0 !important;
-            margin:0 !important;
-            border-radius:0 !important;
-            border-left:none !important;
-            border-right:none !important;
-            border-bottom:none !important;
-            min-height:0 !important;
-            overflow:hidden !important;
+            flex:1 !important; display:flex !important; flex-direction:column !important;
+            gap:0 !important; padding:0 !important; margin:0 !important;
+            border-radius:0 !important; border-left:none !important; border-right:none !important;
+            border-bottom:none !important; min-height:0 !important; overflow:hidden !important;
           }
 
-          /* Wheel row: compact, horizontal */
+          /* Wheel section: vertical stack, wheel centered and big */
           .wheel-side {
-            flex-shrink:0 !important;
-            flex-direction:row !important;
-            align-items:center !important;
-            justify-content:flex-start !important;
-            gap:14px !important;
-            padding:10px 14px !important;
+            flex-shrink:0 !important; flex-direction:column !important;
+            align-items:center !important; justify-content:center !important;
+            gap:10px !important; padding:14px 14px 10px !important;
             border-bottom:1px solid rgba(217,182,90,.18) !important;
           }
-          .wheel-housing { width:150px !important; height:150px !important; flex-shrink:0 !important; }
+          .wheel-housing {
+            width:min(72vw, 260px) !important; height:min(72vw, 260px) !important;
+            flex-shrink:0 !important;
+          }
           .wheel { inset:8px !important; }
           .pointer { border-left-width:8px !important; border-right-width:8px !important; border-top-width:14px !important; top:-4px !important; }
           .wheel-rim { box-shadow:0 8px 20px rgba(0,0,0,.6),inset 0 0 0 5px var(--gold-d),inset 0 0 0 10px #1a130a !important; }
@@ -607,19 +595,21 @@ export default function RoulettePage() {
           .pocket .num { font-size:5px !important; padding-top:3px !important; }
           .tap-spin-hint {
             display:flex !important; position:absolute !important;
-            top:50% !important; left:50% !important;
-            transform:translate(-50%,-50%) !important;
-            width:32% !important; aspect-ratio:1 !important;
-            border-radius:50% !important; z-index:10 !important;
-            background:rgba(217,182,90,.38) !important;
-            align-items:center !important; justify-content:center !important;
-            font-family:var(--fs-head) !important; font-size:9px !important;
-            font-weight:800 !important; letter-spacing:.1em !important;
+            top:50% !important; left:50% !important; transform:translate(-50%,-50%) !important;
+            width:32% !important; aspect-ratio:1 !important; border-radius:50% !important; z-index:10 !important;
+            background:rgba(217,182,90,.38) !important; align-items:center !important;
+            justify-content:center !important; font-family:var(--fs-head) !important;
+            font-size:9px !important; font-weight:800 !important; letter-spacing:.1em !important;
             color:#fff !important; pointer-events:none !important;
             animation:tapPulse 1.5s ease-in-out infinite !important;
           }
-          .result-disp { flex:1 !important; min-height:unset !important; align-items:flex-start !important; justify-content:center !important; gap:6px !important; }
-          .result-num { width:50px !important; height:50px !important; font-size:22px !important; }
+          /* Result display: horizontal row below the wheel */
+          .result-disp {
+            flex-direction:row !important; align-items:center !important;
+            justify-content:center !important; gap:12px !important;
+            min-height:unset !important; flex-shrink:0 !important;
+          }
+          .result-num { width:46px !important; height:46px !important; font-size:20px !important; }
           .result-net { font-size:13px !important; }
 
           /* Board: fills remaining space, scrollable */
@@ -644,6 +634,10 @@ export default function RoulettePage() {
           .ctrl-right .btn { flex:1 !important; min-width:0 !important; font-size:14px !important; padding:12px 0 !important; }
           .total-bet { font-size:12px !important; white-space:nowrap !important; }
           .total-bet b { font-size:14px !important; }
+        }
+        @keyframes tapPulse {
+          0%,100% { transform:translate(-50%,-50%) scale(1); opacity:.7; }
+          50% { transform:translate(-50%,-50%) scale(1.22); opacity:1; }
         }
       `}</style>
     </div>
