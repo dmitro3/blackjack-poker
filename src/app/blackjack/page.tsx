@@ -125,6 +125,7 @@ export default function BlackjackPage() {
 
   // Multiplayer guest state
   const [isGuest, setIsGuest] = useState(false)
+  const [hostLeft, setHostLeft] = useState(false)
   const [guestPhase, setGuestPhase] = useState<'betting'|'playing'|'waiting'|'done'>('betting')
   const [guestBet, setGuestBet] = useState(0)
   const [guestPlayer, setGuestPlayer] = useState<Card[]>([])
@@ -148,6 +149,9 @@ export default function BlackjackPage() {
   const guestHandRef = useRef<Card[]>([])
   const guestBetRef = useRef(0)
   const guestPhaseRef = useRef<'betting'|'playing'|'waiting'|'done'>('betting')
+  const guestDealerRef = useRef<Card[]>([])
+  const hostLeftRef = useRef(false)
+  const botDealerStartedRef = useRef(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -156,6 +160,7 @@ export default function BlackjackPage() {
   useEffect(() => { guestHandRef.current = guestPlayer }, [guestPlayer])
   useEffect(() => { guestBetRef.current = guestBet }, [guestBet])
   useEffect(() => { guestPhaseRef.current = guestPhase }, [guestPhase])
+  useEffect(() => { guestDealerRef.current = guestDealer }, [guestDealer])
 
   useEffect(() => {
     async function init() {
@@ -190,6 +195,7 @@ export default function BlackjackPage() {
           else setGuestPhase('playing')
         })
         .on('broadcast', { event: 'BJ_DEALER_DONE' }, ({ payload }) => {
+          if (hostLeftRef.current) return
           const { dealerHand } = payload as { dealerHand: Card[] }
           const myHand = guestHandRef.current
           const myStake = guestBetRef.current
@@ -212,8 +218,17 @@ export default function BlackjackPage() {
           setToast({ msg: msg + (net > 0 ? '  +'+fmt(net) : net < 0 ? '  −'+fmt(-net) : ''), kind: kind === 'push' ? '' : kind })
           fetch('/api/game/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ game: 'blackjack', chips_wagered: myStake, chips_won: payout }) }).catch(() => {})
         })
+        .on('presence', { event: 'leave' }, ({ leftPresences }) => {
+          if ((leftPresences as unknown as Array<{role: string}>).some((p: {role: string}) => p.role === 'host')) {
+            hostLeftRef.current = true
+            setHostLeft(true)
+          }
+        })
         .subscribe(status => {
-          if (status === 'SUBSCRIBED') ch.send({ type: 'broadcast', event: 'GUEST_JOIN', payload: {} }).catch(() => {})
+          if (status === 'SUBSCRIBED') {
+            ch.track({ role: 'guest' }).catch(() => {})
+            ch.send({ type: 'broadcast', event: 'GUEST_JOIN', payload: {} }).catch(() => {})
+          }
         })
         channelRef.current = ch
 
@@ -245,7 +260,10 @@ export default function BlackjackPage() {
         roomCodeRef.current = code
         fetch('/api/game/room', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, game: 'blackjack', status: 'solo' }) }).catch(() => {})
         const ch = supabase.channel(`ht-game-${code}`, { config: { broadcast: { self: false } } })
-        ch.on('broadcast', { event: 'SPECTATOR_JOIN' }, () => {}).subscribe()
+        ch.on('broadcast', { event: 'SPECTATOR_JOIN' }, () => {})
+          .subscribe(status => {
+            if (status === 'SUBSCRIBED') ch.track({ role: 'host' }).catch(() => {})
+          })
         channelRef.current = ch
       }
       setLoading(false)
@@ -253,6 +271,45 @@ export default function BlackjackPage() {
     init()
     return () => { channelRef.current?.unsubscribe() }
   }, [router])
+
+  // Bot dealer: runs when host disconnects while guest is waiting for dealer result
+  useEffect(() => {
+    if (!hostLeft || guestPhase !== 'waiting') return
+    if (botDealerStartedRef.current) return
+    botDealerStartedRef.current = true
+    ;(async () => {
+      await sleep(200)
+      const holeCard = (guestDeckRef.current.length < 4 ? (guestDeckRef.current = shuffle(freshDeck())) : guestDeckRef.current).pop()!
+      const d = [...guestDealerRef.current, holeCard]
+      setGuestDealer([...d])
+      setGuestHideHole(false)
+      await sleep(620)
+      while (handValue(d).total < 17) {
+        if (guestDeckRef.current.length < 4) guestDeckRef.current = shuffle(freshDeck())
+        d.push(guestDeckRef.current.pop()!)
+        setGuestDealer([...d])
+        await sleep(560)
+      }
+      const dv = handValue(d).total
+      const myHand = guestHandRef.current
+      const myStake = guestBetRef.current
+      if (myStake <= 0) return
+      const pv = handValue(myHand).total
+      let kind: string, payout: number
+      if (pv > 21)      { kind = 'lose'; payout = 0 }
+      else if (dv > 21) { kind = 'win';  payout = myStake * 2 }
+      else if (pv > dv) { kind = 'win';  payout = myStake * 2 }
+      else if (pv < dv) { kind = 'lose'; payout = 0 }
+      else              { kind = 'push'; payout = myStake }
+      const net = payout - myStake
+      setBal(b => b + payout)
+      const msg = kind === 'win' ? (dv > 21 ? 'Dealer busts' : 'You win') : kind === 'push' ? 'Push' : (pv > 21 ? 'Bust' : 'Dealer wins')
+      setGuestResult({ kind, msg, net })
+      setGuestPhase('done')
+      setToast({ msg: msg + (net > 0 ? '  +'+fmt(net) : net < 0 ? '  −'+fmt(-net) : ''), kind: kind === 'push' ? '' : kind })
+      fetch('/api/game/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ game: 'blackjack', chips_wagered: myStake, chips_won: payout }) }).catch(() => {})
+    })()
+  }, [hostLeft, guestPhase]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Responsible gambling
   useEffect(() => {
@@ -595,8 +652,8 @@ export default function BlackjackPage() {
         </div>
       )}
       {isGuest && (
-        <div style={{ position:'sticky', top:0, zIndex:50, background:'rgba(58,208,122,.1)', borderBottom:'1px solid rgba(58,208,122,.3)', padding:'8px 24px', textAlign:'center', fontFamily:'var(--fs-head)', fontSize:12, letterSpacing:'.12em', color:'#3ad07a', textTransform:'uppercase' }}>
-          🃏 Playing at a friend&apos;s table — same dealer, your own chips
+        <div style={{ position:'sticky', top:0, zIndex:50, background: hostLeft ? 'rgba(231,112,138,.1)' : 'rgba(58,208,122,.1)', borderBottom: hostLeft ? '1px solid rgba(231,112,138,.3)' : '1px solid rgba(58,208,122,.3)', padding:'8px 24px', textAlign:'center', fontFamily:'var(--fs-head)', fontSize:12, letterSpacing:'.12em', color: hostLeft ? '#e7708a' : '#3ad07a', textTransform:'uppercase' }}>
+          {hostLeft ? '⚠️ Host has left the table' : '🃏 Playing at a friend\'s table — same dealer, your own chips'}
         </div>
       )}
 
@@ -710,30 +767,39 @@ export default function BlackjackPage() {
           <>
             {guestPhase === 'betting' && (
               <>
-                <div className="bet-disp">
-                  <div className="bet-circle">
-                    <span className="lbl">Bet</span>
-                    <span className="amt tabnum">{guestBet ? fmtShort(guestBet) : '—'}</span>
+                {hostLeft ? (
+                  <div className="actions" style={{flexDirection:'column',alignItems:'center',gap:12}}>
+                    <div style={{color:'var(--cream-dim)',fontSize:14,fontFamily:'var(--fs-head)',letterSpacing:'.06em'}}>Host has left — no more hands at this table</div>
+                    <button className="btn" onClick={() => router.push('/blackjack')}>Play Solo</button>
                   </div>
-                  {guestBet > 0 && <button className="btn btn-sm btn-ghost" onClick={() => setGuestBet(0)}>Clear</button>}
-                </div>
-                <div className="vert" />
-                <div className="chip-tray">
-                  {CHIPS.map(c => (
-                    <div key={c.v} className={'chip'+((c.v > bal-guestBet) ? ' dis' : '')} style={{ background: c.color }} onClick={() => { if (c.v <= bal-guestBet) setGuestBet(b => b + c.v) }}>
-                      <span>{c.label}</span>
+                ) : (
+                  <>
+                    <div className="bet-disp">
+                      <div className="bet-circle">
+                        <span className="lbl">Bet</span>
+                        <span className="amt tabnum">{guestBet ? fmtShort(guestBet) : '—'}</span>
+                      </div>
+                      {guestBet > 0 && <button className="btn btn-sm btn-ghost" onClick={() => setGuestBet(0)}>Clear</button>}
                     </div>
-                  ))}
-                  <div className={'chip'+(bal-guestBet<=0?' dis':'')} style={{background:'linear-gradient(160deg,#8f0f22,#440b18)',fontSize:10}} onClick={() => { if (bal-guestBet>0) setGuestBet(bal) }}>
-                    <span>ALL IN</span>
-                  </div>
-                </div>
-                <div className="vert" />
-                <div className="actions">
-                  <div style={{textAlign:'center',color:'var(--cream-faint)',fontSize:13,fontFamily:'var(--fs-head)',letterSpacing:'.08em'}}>
-                    {guestBet > 0 ? 'Bet set — waiting for host' : 'Set your bet'}
-                  </div>
-                </div>
+                    <div className="vert" />
+                    <div className="chip-tray">
+                      {CHIPS.map(c => (
+                        <div key={c.v} className={'chip'+((c.v > bal-guestBet) ? ' dis' : '')} style={{ background: c.color }} onClick={() => { if (c.v <= bal-guestBet) setGuestBet(b => b + c.v) }}>
+                          <span>{c.label}</span>
+                        </div>
+                      ))}
+                      <div className={'chip'+(bal-guestBet<=0?' dis':'')} style={{background:'linear-gradient(160deg,#8f0f22,#440b18)',fontSize:10}} onClick={() => { if (bal-guestBet>0) setGuestBet(bal) }}>
+                        <span>ALL IN</span>
+                      </div>
+                    </div>
+                    <div className="vert" />
+                    <div className="actions">
+                      <div style={{textAlign:'center',color:'var(--cream-faint)',fontSize:13,fontFamily:'var(--fs-head)',letterSpacing:'.08em'}}>
+                        {guestBet > 0 ? 'Bet set — waiting for host' : 'Set your bet'}
+                      </div>
+                    </div>
+                  </>
+                )}
               </>
             )}
             {guestPhase === 'playing' && (
@@ -748,7 +814,14 @@ export default function BlackjackPage() {
             )}
             {guestPhase === 'done' && (
               <div className="actions" style={{flexDirection:'column',alignItems:'center'}}>
-                <button className="btn" onClick={guestNewHand}>Next Hand</button>
+                {hostLeft ? (
+                  <>
+                    <div style={{color:'var(--cream-faint)',fontSize:12,fontFamily:'var(--fs-head)',letterSpacing:'.08em',marginBottom:8}}>Host has left</div>
+                    <button className="btn" onClick={() => router.push('/blackjack')}>Play Solo</button>
+                  </>
+                ) : (
+                  <button className="btn" onClick={guestNewHand}>Next Hand</button>
+                )}
                 {bal <= 0 && (
                   <button className="btn btn-ghost btn-sm" style={{marginTop:8}} onClick={async () => {
                     const res = await fetch('/api/game/session', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ game:'refill', chips_wagered:0, chips_won:100000 }) })

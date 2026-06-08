@@ -89,10 +89,12 @@ export default function RoulettePage() {
   const isGuestRef = useRef(false)
   const lastWinRef = useRef<{num:number,net:number}|null>(null)
   const betsRef = useRef<Record<string, number>>({})
+  const spinningRef = useRef(false)
   const router = useRouter()
   const supabase = createClient()
 
   useEffect(() => { betsRef.current = bets }, [bets])
+  useEffect(() => { spinningRef.current = spinning }, [spinning])
 
   useEffect(() => {
     async function init() {
@@ -141,8 +143,26 @@ export default function RoulettePage() {
             setWinLimitAmount(0)
             setShowWinLimit(true)
           })
+          .on('presence', { event: 'leave' }, ({ leftPresences }) => {
+            if (!(leftPresences as unknown as Array<{role: string}>).some((p: {role: string}) => p.role === 'host')) return
+            // Host left — promote guest to dealer
+            if (spinningRef.current) {
+              const refund = Object.values(betsRef.current).reduce((a, b) => a + b, 0)
+              if (refund > 0) setBal(b => b + refund)
+              setBets({})
+              setSpinning(false)
+              setToast({ msg: 'Host disconnected — bets refunded', kind: '' })
+            } else {
+              setToast({ msg: 'Host left — you\'re now the dealer', kind: '' })
+            }
+            isGuestRef.current = false
+            setIsGuest(false)
+          })
           .subscribe(status => {
-            if (status === 'SUBSCRIBED') ch.send({ type: 'broadcast', event: 'PLAYER_JOIN', payload: {} }).catch(() => {})
+            if (status === 'SUBSCRIBED') {
+              ch.track({ role: 'guest' }).catch(() => {})
+              ch.send({ type: 'broadcast', event: 'PLAYER_JOIN', payload: {} }).catch(() => {})
+            }
           })
         channelRef.current = ch
 
@@ -177,7 +197,9 @@ export default function RoulettePage() {
           try { localStorage.setItem('roulette_ban_until', String(Date.now() + 10 * 60 * 1000)) } catch {}
           setWinLimitAmount(0)
           setShowWinLimit(true)
-        }).subscribe()
+        }).subscribe(status => {
+          if (status === 'SUBSCRIBED') ch.track({ role: 'host' }).catch(() => {})
+        })
         channelRef.current = ch
       }
       setLoading(false)
