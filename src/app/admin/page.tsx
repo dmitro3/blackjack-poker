@@ -9,7 +9,7 @@ interface GameRoom {
   game: string
   host_name: string
   guest_name: string | null
-  status: 'waiting' | 'active'
+  status: 'waiting' | 'active' | 'solo' | 'ended'
   created_at: string
   updated_at: string
 }

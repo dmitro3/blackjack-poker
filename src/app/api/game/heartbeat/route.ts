@@ -14,7 +14,7 @@ export async function POST(req: Request) {
   await admin.from('profiles').update({ last_login: now }).eq('id', user.id)
 
   if (code) {
-    await admin.from('game_rooms').update({ updated_at: now }).eq('code', code).catch(() => {})
+    try { await admin.from('game_rooms').update({ updated_at: now }).eq('code', code) } catch { /* optional */ }
   }
 
   return NextResponse.json({ ok: true })
