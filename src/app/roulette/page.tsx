@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { playChip, playWin, playLose, startTension, stopTension, setMuted } from '@/lib/casino-sounds'
 import { generateCode, prettyCode } from '@/lib/invite-codes'
 
+const DIRECTOR_EMAIL = 'vedantbhatia8@gmail.com'
 const RED = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36])
 const WHEEL = [0,32,15,19,4,21,2,25,17,34,6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9,22,18,29,7,28,12,35,3,26]
 const SEG = 360/WHEEL.length
@@ -34,6 +35,7 @@ function Toast({ msg, kind, onDone }: { msg: string; kind: string; onDone: () =>
 
 function WinLimitModal({ amount, onLeave }: { amount: number; onLeave: () => void }) {
   const [count, setCount] = useState(30)
+  const isKicked = amount === 0
   useEffect(() => {
     const id = setInterval(() => setCount(c => { if (c <= 1) { onLeave(); return 0 } return c - 1 }), 1000)
     return () => clearInterval(id)
@@ -41,14 +43,27 @@ function WinLimitModal({ amount, onLeave }: { amount: number; onLeave: () => voi
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(5,4,2,.85)', backdropFilter:'blur(6px)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', animation:'floatUp .3s' }}>
       <div style={{ width:480, maxWidth:'92vw', background:'linear-gradient(160deg,#1a1305,#0b0a07)', border:'1px solid rgba(217,182,90,.5)', borderRadius:20, padding:40, textAlign:'center', boxShadow:'0 40px 100px rgba(0,0,0,.7)' }}>
-        <div style={{ fontSize:52, marginBottom:16 }}>🏆</div>
-        <h2 style={{ fontFamily:'var(--fs-head)', fontWeight:700, fontSize:24, color:'var(--gold-l)', margin:'0 0 12px', letterSpacing:'.04em' }}>Table Limit Reached</h2>
-        <p style={{ color:'var(--cream-dim)', fontSize:15, lineHeight:1.6, margin:'0 0 10px' }}>
-          You&apos;ve won <strong style={{ color:'var(--gold-l)', fontVariantNumeric:'tabular-nums' }}>{Number(amount).toLocaleString('en-US')}</strong> chips in a single spin — congratulations!
-        </p>
-        <p style={{ color:'var(--cream-faint)', fontSize:13, lineHeight:1.5, margin:'0 0 28px' }}>
-          For fairness, you&apos;re being asked to leave the table. You&apos;ll be locked out of Roulette for 10 minutes.
-        </p>
+        <div style={{ fontSize:52, marginBottom:16 }}>{isKicked ? '🚫' : '🏆'}</div>
+        <h2 style={{ fontFamily:'var(--fs-head)', fontWeight:700, fontSize:24, color:'var(--gold-l)', margin:'0 0 12px', letterSpacing:'.04em' }}>{isKicked ? 'Removed by Admin' : 'Table Limit Reached'}</h2>
+        {isKicked ? (
+          <>
+            <p style={{ color:'var(--cream-dim)', fontSize:15, lineHeight:1.6, margin:'0 0 10px' }}>
+              An admin has removed you from this table.
+            </p>
+            <p style={{ color:'var(--cream-faint)', fontSize:13, lineHeight:1.5, margin:'0 0 28px' }}>
+              You&apos;ll be locked out of Roulette for 10 minutes.
+            </p>
+          </>
+        ) : (
+          <>
+            <p style={{ color:'var(--cream-dim)', fontSize:15, lineHeight:1.6, margin:'0 0 10px' }}>
+              You&apos;ve won <strong style={{ color:'var(--gold-l)', fontVariantNumeric:'tabular-nums' }}>{Number(amount).toLocaleString('en-US')}</strong> chips in a single spin — congratulations!
+            </p>
+            <p style={{ color:'var(--cream-faint)', fontSize:13, lineHeight:1.5, margin:'0 0 28px' }}>
+              For fairness, you&apos;re being asked to leave the table. You&apos;ll be locked out of Roulette for 10 minutes.
+            </p>
+          </>
+        )}
         <div style={{ width:64, height:64, borderRadius:'50%', background:'rgba(217,182,90,.12)', border:'2px solid rgba(217,182,90,.4)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 24px', fontFamily:'var(--fs-display)', fontWeight:900, fontSize:22, color:'var(--gold-l)' }}>{count}</div>
         <button onClick={onLeave} style={{ padding:'14px 40px', borderRadius:12, border:'none', cursor:'pointer', background:'var(--gold-grad)', color:'#2a1f08', fontFamily:'var(--fs-head)', fontWeight:700, fontSize:14, letterSpacing:'.1em', textTransform:'uppercase', boxShadow:'0 8px 24px rgba(217,182,90,.4)' }}>
           Leave Table
@@ -76,12 +91,14 @@ export default function RoulettePage() {
   const [loading, setLoading] = useState(true)
   const [muted, setMutedUI] = useState(false)
   const [isSpectator, setIsSpectator] = useState(false)
+  const [userEmail, setUserEmail] = useState('')
   const wheelRef = useRef<HTMLDivElement>(null)
   const ballRef = useRef<HTMLDivElement>(null)
   const rotRef = useRef(0)
   const roomCodeRef = useRef('')
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const isSpectatorRef = useRef(false)
+  const lastWinRef = useRef<{num:number,net:number}|null>(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -98,6 +115,7 @@ export default function RoulettePage() {
       } catch {}
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
+      if (user.email) setUserEmail(user.email)
 
       const params = new URLSearchParams(window.location.search)
       const sc = params.get('spectate')
@@ -108,8 +126,8 @@ export default function RoulettePage() {
         const ch = supabase.channel(`ht-game-${sc.toUpperCase()}`)
         ch.on('broadcast', { event: 'SPIN_START' }, () => { setSpinning(true); setWin(null) })
           .on('broadcast', { event: 'SPIN_END' }, ({ payload }) => {
-            const { num, net } = payload as { num: number; net: number }
-            setWin({ num, net }); setSpinning(false)
+            const p = payload as { num?: number; net?: number }
+            if (p.num !== undefined) { setWin({ num: p.num, net: p.net ?? 0 }); setSpinning(false) }
           })
           .subscribe(status => {
             if (status === 'SUBSCRIBED') ch.send({ type: 'broadcast', event: 'SPECTATOR_JOIN', payload: {} }).catch(() => {})
@@ -123,7 +141,13 @@ export default function RoulettePage() {
         fetch('/api/game/room', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, game: 'roulette', status: 'solo' }) }).catch(() => {})
         const ch = supabase.channel(`ht-game-${code}`, { config: { broadcast: { self: false } } })
         ch.on('broadcast', { event: 'SPECTATOR_JOIN' }, () => {
-          if (channelRef.current) channelRef.current.send({ type: 'broadcast', event: 'SPIN_END', payload: {} }).catch(() => {})
+          if (channelRef.current && lastWinRef.current) {
+            channelRef.current.send({ type: 'broadcast', event: 'SPIN_END', payload: lastWinRef.current }).catch(() => {})
+          }
+        }).on('broadcast', { event: 'ADMIN_KICK' }, () => {
+          try { localStorage.setItem('roulette_ban_until', String(Date.now() + 10 * 60 * 1000)) } catch {}
+          setWinLimitAmount(0)
+          setShowWinLimit(true)
         }).subscribe()
         channelRef.current = ch
       }
@@ -202,6 +226,7 @@ export default function RoulettePage() {
       setBal(b => b + winnings)
       const net = winnings - wagered
       setWin({ num: w, net })
+      lastWinRef.current = { num: w, net }
       setSpinning(false)
       if (net > 0) playWin(); else if (net < 0) playLose()
       const label = w===0?'Zero':(colOf(w)==='red'?'Red ':'Black ')+w
@@ -285,8 +310,16 @@ export default function RoulettePage() {
       </header>
 
       {isSpectator && (
-        <div style={{ background:'rgba(217,182,90,.12)', border:'1px solid rgba(217,182,90,.35)', borderRadius:999, padding:'7px 20px', textAlign:'center', margin:'0 22px', fontFamily:'var(--fs-head)', fontSize:12, letterSpacing:'.12em', color:'var(--gold-l)', textTransform:'uppercase' }}>
-          👁 Spectating Live — Read Only
+        <div style={{ background:'rgba(217,182,90,.12)', border:'1px solid rgba(217,182,90,.35)', borderRadius:999, padding:'7px 20px', textAlign:'center', margin:'0 22px', fontFamily:'var(--fs-head)', fontSize:12, letterSpacing:'.12em', color:'var(--gold-l)', textTransform:'uppercase', display:'flex', alignItems:'center', justifyContent:'center', gap:16 }}>
+          <span>👁 Spectating Live — Read Only</span>
+          {userEmail === DIRECTOR_EMAIL && (
+            <button
+              onClick={() => channelRef.current?.send({ type:'broadcast', event:'ADMIN_KICK', payload:{} }).catch(() => {})}
+              style={{ padding:'5px 16px', background:'#b91c1c', border:'1px solid #ef4444', borderRadius:999, cursor:'pointer', color:'#fff', fontFamily:'var(--fs-head)', fontSize:10, letterSpacing:'.12em', textTransform:'uppercase', fontWeight:700 }}
+            >
+              Kick Player
+            </button>
+          )}
         </div>
       )}
 

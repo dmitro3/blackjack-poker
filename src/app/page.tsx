@@ -485,73 +485,9 @@ function LobbyContent() {
           </Link>
         </section>
 
-        {/* Lower panels */}
-        <section className="lobby-bottom" style={{display:'grid',gridTemplateColumns:'1.3fr 1fr',gap:24,marginTop:34}}>
-          {/* Invite panel */}
-          <div className="gilt" style={{padding:30,borderRadius:'var(--radius-lg)'}}>
-            <h2 className="gold-text" style={{fontFamily:'var(--fs-head)',fontWeight:700,fontSize:22,margin:'0 0 6px',letterSpacing:'.03em'}}>
-              Invite the table
-            </h2>
-            <p style={{color:'var(--cream-dim)',fontSize:14,lineHeight:1.55,margin:'0 0 22px'}}>
-              Share your private invite link. Friends who sign up get 5,000 bonus chips — and so do you.
-            </p>
-            <div style={{display:'flex',gap:10,alignItems:'stretch'}}>
-              <input
-                readOnly
-                value={inviteUrl}
-                style={{
-                  flex:1,background:'rgba(0,0,0,.4)',border:'1px solid rgba(217,182,90,.3)',borderRadius:10,
-                  padding:'0 16px',color:'var(--gold-l)',fontFamily:'Manrope',fontSize:14,
-                  letterSpacing:'.02em',height:48,
-                }}
-              />
-              <button className="btn" onClick={handleCopyInvite}>{copied ? 'Copied!' : 'Copy Link'}</button>
-            </div>
-            <div style={{
-              display:'inline-flex',alignItems:'center',gap:10,marginTop:18,padding:'10px 16px',
-              borderRadius:10,background:'rgba(0,0,0,.35)',border:'1px dashed rgba(217,182,90,.4)',
-            }}>
-              <span style={{fontSize:11,letterSpacing:'.2em',color:'var(--cream-faint)',textTransform:'uppercase'}}>Your Code</span>
-              <span style={{fontFamily:'var(--fs-head)',fontWeight:700,fontSize:20,letterSpacing:'.32em',color:'var(--gold-l)'}}>
-                {profile?.invite_code || '——————'}
-              </span>
-            </div>
-            <div style={{display:'flex',gap:10,marginTop:22}}>
-              <div style={{
-                flex:1,aspectRatio:'1',borderRadius:12,border:'1px dashed rgba(217,182,90,.3)',
-                display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',
-                gap:6,background:'rgba(0,0,0,.25)',
-              }}>
-                <div style={{
-                  width:34,height:34,borderRadius:'50%',
-                  background:'var(--gold-grad)',color:'#2a1f08',
-                  display:'flex',alignItems:'center',justifyContent:'center',
-                  fontFamily:'var(--fs-head)',fontWeight:800,fontSize:14,
-                }}>
-                  {profile?.display_name?.[0]?.toUpperCase() || 'V'}
-                </div>
-                <small style={{fontSize:10,letterSpacing:'.1em',color:'var(--cream-faint)',textTransform:'uppercase'}}>You</small>
-              </div>
-              {[1,2,3].map(i => (
-                <div key={i} style={{
-                  flex:1,aspectRatio:'1',borderRadius:12,border:'1px dashed rgba(217,182,90,.3)',
-                  display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',
-                  gap:6,background:'rgba(0,0,0,.25)',
-                }}>
-                  <div style={{
-                    width:34,height:34,borderRadius:'50%',
-                    background:'rgba(217,182,90,.12)',border:'1px solid rgba(217,182,90,.3)',
-                    display:'flex',alignItems:'center',justifyContent:'center',
-                    color:'var(--cream-faint)',fontSize:16,
-                  }}>+</div>
-                  <small style={{fontSize:10,letterSpacing:'.1em',color:'var(--cream-faint)',textTransform:'uppercase'}}>Open</small>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Stack panel */}
-          <div className="gilt" style={{padding:30,borderRadius:'var(--radius-lg)'}}>
+        {/* Stack panel — centered */}
+        <section style={{display:'flex',justifyContent:'center',marginTop:34}}>
+          <div className="gilt" style={{padding:30,borderRadius:'var(--radius-lg)',width:'100%',maxWidth:560}}>
             <h2 className="gold-text" style={{fontFamily:'var(--fs-head)',fontWeight:700,fontSize:22,margin:'0 0 6px',letterSpacing:'.03em'}}>
               Your Stack
             </h2>
@@ -602,8 +538,7 @@ function LobbyContent() {
         @media (max-width: 640px) {
           .lobby-grid { grid-template-columns: 1fr 1fr !important; }
           .lobby-grid > * { grid-column: span 1 !important; }
-          .lobby-bottom { grid-template-columns: 1fr !important; }
-          .lobby-container { padding: 0 12px 24px !important; }
+.lobby-container { padding: 0 12px 24px !important; }
           .lobby-header-logo { font-size: 17px !important; letter-spacing: .08em !important; }
           .lobby-header { flex-wrap: wrap; gap: 8px !important; padding: 12px 14px !important; }
           .lobby-header-right { gap: 8px !important; flex-wrap: wrap; justify-content: flex-end; }
