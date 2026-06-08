@@ -281,6 +281,7 @@ export default function AdminPage() {
   const [players, setPlayers] = useState<Profile[]>([])
   const [gameStats, setGameStats] = useState<GameStat[]>([])
   const [sessionsByUser, setSessionsByUser] = useState<Record<string, PlayerGameStat[]>>({})
+  const [allSessions, setAllSessions] = useState<Session[]>([])
   const [refillEnabled, setRefillEnabled] = useState(true)
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState<{ msg: string; kind: string } | null>(null)
@@ -319,6 +320,11 @@ export default function AdminPage() {
       map[s.game].total_won += s.chips_won
     }
     setGameStats(Object.values(map).sort((a, b) => b.count - a.count))
+
+    // Store raw sessions sorted newest first
+    setAllSessions([...data.sessions].sort((a: Session, b: Session) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    ))
 
     // Build per-player game stats
     const userGameMap: Record<string, Record<string, PlayerGameStat>> = {}
@@ -472,7 +478,7 @@ export default function AdminPage() {
                     {rooms.filter(r => r.status === 'active' || r.status === 'solo').length > 0 && (
                       <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#5fd99a', display: 'inline-block', boxShadow: '0 0 5px #5fd99a' }} />
                     )}
-                    Live Games
+                    Games
                   </span>
                 : 'Settings'}
             </button>
@@ -750,108 +756,134 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Live Games tab */}
-        {activeTab === 'live' && (
-          <div style={panelStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <h2 style={{ fontFamily: 'var(--fs-head)', fontWeight: 700, fontSize: 20, margin: 0 }}>
-                <span className="gold-text">Live Games</span>
-              </h2>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span style={{ fontSize: 12, color: 'var(--cream-faint)', fontFamily: 'var(--fs-head)', letterSpacing: '.05em' }}>
-                  {rooms.filter(r => r.status === 'active').length} active · {rooms.filter(r => r.status === 'solo').length} solo · {rooms.filter(r => r.status === 'waiting').length} waiting
-                </span>
-                <button className="btn btn-sm btn-ghost" onClick={() => load(true)} disabled={refreshing}
-                  style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                  <span style={{ display: 'inline-block', width: 11, height: 11, border: '1.5px solid currentColor', borderTopColor: 'transparent', borderRadius: '50%', animation: refreshing ? 'spin360 .7s linear infinite' : 'none' }} />
-                  Refresh
-                </button>
-              </div>
-            </div>
+        {/* Games tab — live now + full history */}
+        {activeTab === 'live' && (() => {
+          const GAME_ICONS: Record<string, string> = { blackjack: '🃏', poker: '♠', roulette: '🎰', slots: '🎰', baccarat: '🎴', tower: '🗼' }
+          const playerMap = Object.fromEntries(players.map(p => [p.id, p.display_name || p.email || 'Unknown']))
+          const activeRooms = rooms.filter(r => r.status === 'active' || r.status === 'solo' || r.status === 'waiting')
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
 
-            {rooms.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--cream-faint)', fontFamily: 'var(--fs-head)', letterSpacing: '.08em', fontSize: 14 }}>
-                <div style={{ fontSize: 32, marginBottom: 12 }}>🎲</div>
-                No active games right now
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {rooms.map(room => {
-                  const ICONS: Record<string, string> = { blackjack: '🃏', poker: '♠', roulette: '🎰', slots: '🎰', baccarat: '🎴' }
-                  const isActive = room.status === 'active'
-                  const isSolo = room.status === 'solo'
-                  const ago = timeAgo(room.updated_at)
-                  const accentColor = isActive ? '#5fd99a' : isSolo ? '#d9b65a' : '#8ab4f8'
-                  return (
-                    <div key={room.code} style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      padding: '16px 20px', borderRadius: 12,
-                      background: isActive ? 'rgba(95,217,154,.05)' : isSolo ? 'rgba(217,182,90,.04)' : 'rgba(0,0,0,.3)',
-                      border: `1px solid ${isActive ? 'rgba(95,217,154,.25)' : isSolo ? 'rgba(217,182,90,.18)' : 'rgba(217,182,90,.12)'}`,
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                        <div style={{
-                          width: 44, height: 44, borderRadius: 10, flexShrink: 0,
-                          background: `${accentColor}18`,
-                          border: `1px solid ${accentColor}40`,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20,
+              {/* Live Now section */}
+              <div style={panelStyle}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                  <h2 style={{ fontFamily: 'var(--fs-head)', fontWeight: 700, fontSize: 20, margin: 0 }}>
+                    <span className="gold-text">Live Now</span>
+                    {activeRooms.length > 0 && (
+                      <span style={{ marginLeft: 12, width: 8, height: 8, borderRadius: '50%', background: '#5fd99a', display: 'inline-block', boxShadow: '0 0 6px #5fd99a', verticalAlign: 'middle' }} />
+                    )}
+                  </h2>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span style={{ fontSize: 12, color: 'var(--cream-faint)', fontFamily: 'var(--fs-head)', letterSpacing: '.05em' }}>
+                      {rooms.filter(r => r.status === 'active').length} active · {rooms.filter(r => r.status === 'solo').length} solo
+                    </span>
+                    <button className="btn btn-sm btn-ghost" onClick={() => load(true)} disabled={refreshing}
+                      style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                      <span style={{ display: 'inline-block', width: 11, height: 11, border: '1.5px solid currentColor', borderTopColor: 'transparent', borderRadius: '50%', animation: refreshing ? 'spin360 .7s linear infinite' : 'none' }} />
+                      Refresh
+                    </button>
+                  </div>
+                </div>
+
+                {activeRooms.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '36px 0', color: 'var(--cream-faint)', fontFamily: 'var(--fs-head)', letterSpacing: '.08em', fontSize: 14 }}>
+                    <div style={{ fontSize: 32, marginBottom: 10 }}>🎲</div>
+                    No active games right now
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {activeRooms.map(room => {
+                      const isActive = room.status === 'active'
+                      const isSolo = room.status === 'solo'
+                      const accentColor = isActive ? '#5fd99a' : isSolo ? '#d9b65a' : '#8ab4f8'
+                      return (
+                        <div key={room.code} style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          padding: '14px 18px', borderRadius: 12,
+                          background: isActive ? 'rgba(95,217,154,.05)' : 'rgba(217,182,90,.04)',
+                          border: `1px solid ${isActive ? 'rgba(95,217,154,.22)' : 'rgba(217,182,90,.16)'}`,
                         }}>
-                          {ICONS[room.game] || '🎲'}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                            <div style={{ width: 42, height: 42, borderRadius: 10, flexShrink: 0, background: `${accentColor}18`, border: `1px solid ${accentColor}40`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>
+                              {GAME_ICONS[room.game] || '🎲'}
+                            </div>
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                                <span style={{ fontFamily: 'var(--fs-head)', fontWeight: 700, fontSize: 14, textTransform: 'capitalize' }}>{room.game}</span>
+                                <span style={{ fontSize: 10, letterSpacing: '.1em', textTransform: 'uppercase', padding: '2px 8px', borderRadius: 999, fontFamily: 'var(--fs-head)', background: `${accentColor}20`, color: accentColor, border: `1px solid ${accentColor}50` }}>
+                                  {isActive ? '● Active' : isSolo ? '● Solo' : '⏳ Waiting'}
+                                </span>
+                              </div>
+                              <div style={{ fontSize: 13, color: 'var(--cream-dim)' }}>
+                                <span style={{ color: 'var(--cream)' }}>{room.host_name || 'Unknown'}</span>
+                                {isActive && room.guest_name ? <> vs <span style={{ color: 'var(--cream)' }}>{room.guest_name}</span></> : isSolo ? <span style={{ color: 'var(--cream-faint)' }}> · solo</span> : <span style={{ color: 'var(--cream-faint)' }}> · waiting</span>}
+                              </div>
+                              <div style={{ fontSize: 11, color: 'var(--cream-faint)', marginTop: 2, fontFamily: 'var(--fs-head)', letterSpacing: '.05em' }}>{timeAgo(room.updated_at)}</div>
+                            </div>
+                          </div>
+                          <Link href={`/${room.game}?spectate=${room.code}`} target="_blank" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 999, textDecoration: 'none', flexShrink: 0, fontFamily: 'var(--fs-head)', fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase', fontWeight: 700, background: 'rgba(217,182,90,.12)', border: '1px solid rgba(217,182,90,.3)', color: 'var(--gold-l)' }}>
+                            👁 Spectate
+                          </Link>
                         </div>
-                        <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                            <span style={{ fontFamily: 'var(--fs-head)', fontWeight: 700, fontSize: 14, textTransform: 'capitalize' }}>{room.game}</span>
-                            <span style={{
-                              fontSize: 10, letterSpacing: '.1em', textTransform: 'uppercase',
-                              padding: '2px 8px', borderRadius: 999, fontFamily: 'var(--fs-head)',
-                              background: `${accentColor}20`,
-                              color: accentColor,
-                              border: `1px solid ${accentColor}50`,
-                            }}>
-                              {isActive ? '● Active' : isSolo ? '● Solo' : '⏳ Waiting'}
-                            </span>
-                          </div>
-                          <div style={{ fontSize: 13, color: 'var(--cream-dim)' }}>
-                            <span style={{ color: 'var(--cream)' }}>{room.host_name || 'Unknown'}</span>
-                            {isActive && room.guest_name
-                              ? <> vs <span style={{ color: 'var(--cream)' }}>{room.guest_name}</span></>
-                              : isSolo
-                              ? <span style={{ color: 'var(--cream-faint)' }}> · playing solo vs bots</span>
-                              : <span style={{ color: 'var(--cream-faint)' }}> · waiting for opponent</span>}
-                          </div>
-                          <div style={{ fontSize: 11, color: 'var(--cream-faint)', marginTop: 2, fontFamily: 'var(--fs-head)', letterSpacing: '.05em' }}>
-                            {room.code.slice(0, 4)}-{room.code.slice(4)} · {ago}
-                          </div>
-                        </div>
-                      </div>
-                      <Link
-                        href={`/${room.game}?spectate=${room.code}`}
-                        target="_blank"
-                        style={{
-                          display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 18px',
-                          borderRadius: 999, textDecoration: 'none', flexShrink: 0,
-                          fontFamily: 'var(--fs-head)', fontSize: 12, letterSpacing: '.1em',
-                          textTransform: 'uppercase', fontWeight: 700,
-                          background: 'rgba(217,182,90,.12)',
-                          border: '1px solid rgba(217,182,90,.3)', color: 'var(--gold-l)',
-                          transition: '.2s',
-                        }}
-                      >
-                        👁 Spectate
-                      </Link>
-                    </div>
-                  )
-                })}
+                      )
+                    })}
+                  </div>
+                )}
               </div>
-            )}
 
-            <div style={{ marginTop: 20, padding: '14px 16px', borderRadius: 10, background: 'rgba(0,0,0,.3)', border: '1px solid rgba(217,182,90,.1)', fontSize: 12, color: 'var(--cream-faint)', lineHeight: 1.6 }}>
-              <strong style={{ color: 'var(--cream-dim)' }}>Note:</strong> All active games appear here automatically — solo games vs bots, waiting rooms, and live multiplayer matches.
-              Spectating opens the game in a new tab with all cards visible and no action buttons.
-              The{' '}<code style={{ fontFamily: 'monospace', background: 'rgba(255,255,255,.05)', padding: '1px 5px', borderRadius: 4 }}>game_rooms</code> table must exist in Supabase — see schema.sql.
+              {/* Game History section */}
+              <div style={panelStyle}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                  <h2 style={{ fontFamily: 'var(--fs-head)', fontWeight: 700, fontSize: 20, margin: 0 }}>
+                    <span className="gold-text">Game History</span>
+                  </h2>
+                  <span style={{ fontSize: 12, color: 'var(--cream-faint)', fontFamily: 'var(--fs-head)' }}>{allSessions.length} sessions</span>
+                </div>
+                {allSessions.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '36px 0', color: 'var(--cream-faint)', fontFamily: 'var(--fs-head)', letterSpacing: '.08em', fontSize: 14 }}>
+                    <div style={{ fontSize: 32, marginBottom: 10 }}>📋</div>
+                    No game sessions recorded yet
+                  </div>
+                ) : (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid rgba(217,182,90,.18)' }}>
+                          {['Game', 'Player', 'Wagered', 'Won', 'Net P&L', 'When'].map(h => (
+                            <th key={h} style={{ padding: '8px 14px', textAlign: 'left', fontFamily: 'var(--fs-head)', fontSize: 10, letterSpacing: '.16em', color: 'var(--cream-faint)', textTransform: 'uppercase', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {allSessions.map((s, idx) => {
+                          const net = s.chips_won - s.chips_wagered
+                          const playerName = playerMap[s.user_id] || 'Unknown'
+                          return (
+                            <tr key={idx} style={{ borderBottom: '1px solid rgba(217,182,90,.06)' }}>
+                              <td style={{ padding: '11px 14px', whiteSpace: 'nowrap' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <span style={{ fontSize: 16 }}>{GAME_ICONS[s.game] || '🎲'}</span>
+                                  <span style={{ fontFamily: 'var(--fs-head)', fontSize: 13, fontWeight: 700, textTransform: 'capitalize' }}>{s.game}</span>
+                                </div>
+                              </td>
+                              <td style={{ padding: '11px 14px', fontSize: 13, color: 'var(--cream)', fontWeight: 600 }}>{playerName}</td>
+                              <td style={{ padding: '11px 14px', fontSize: 13, color: 'var(--cream-dim)', fontVariantNumeric: 'tabular-nums' }}>{fmt(s.chips_wagered)}</td>
+                              <td style={{ padding: '11px 14px', fontSize: 13, color: '#5fd99a', fontVariantNumeric: 'tabular-nums' }}>{fmt(s.chips_won)}</td>
+                              <td style={{ padding: '11px 14px', fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: net >= 0 ? '#5fd99a' : '#e7708a' }}>
+                                {net >= 0 ? '+' : ''}{fmt(net)}
+                              </td>
+                              <td style={{ padding: '11px 14px', fontSize: 12, color: 'var(--cream-faint)', whiteSpace: 'nowrap', fontFamily: 'var(--fs-head)', letterSpacing: '.04em' }}>{timeAgo(s.created_at)}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
 
         {/* Settings tab */}
         {activeTab === 'settings' && (

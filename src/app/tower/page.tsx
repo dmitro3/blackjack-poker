@@ -52,7 +52,7 @@ function TileCard({ state, onClick, floorIdx }: {
   floorIdx: number
 }) {
   const safe = SAFE_CARDS[floorIdx % SAFE_CARDS.length]
-  const w = 82
+  const w = 90
 
   if (state === 'unknown') {
     return (
@@ -113,6 +113,7 @@ export default function TowerPage() {
   const [bombMap, setBombMap] = useState<number[][]>([])
   const [picks, setPicks] = useState<(number | null)[]>(Array(8).fill(null))
   const [payout, setPayout] = useState(0)
+  const [revealFloor, setRevealFloor] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const router = useRouter()
   const supabase = createClient()
@@ -139,11 +140,12 @@ export default function TowerPage() {
     setPicks(Array(8).fill(null))
     setFloor(0)
     setPayout(0)
+    setRevealFloor(null)
     setPhase('playing')
   }
 
   function pickTile(tileIdx: number) {
-    if (phase !== 'playing') return
+    if (phase !== 'playing' || revealFloor !== null) return
     const isBomb = bombMap[floor].includes(tileIdx)
     const newPicks = [...picks]
     newPicks[floor] = tileIdx
@@ -156,23 +158,29 @@ export default function TowerPage() {
         body: JSON.stringify({ game: 'tower', chips_wagered: bet, chips_won: 0 }),
       }).catch(() => {})
     } else {
-      const earned = Math.round(bet * FLOORS[floor].mult)
-      if (floor >= FLOORS.length - 1) {
-        setBal(b => b + earned)
-        setPayout(earned)
-        setPhase('won')
-        fetch('/api/game/session', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ game: 'tower', chips_wagered: bet, chips_won: earned }),
-        }).catch(() => {})
-      } else {
-        setFloor(floor + 1)
-      }
+      const currentFloor = floor
+      const earned = Math.round(bet * FLOORS[currentFloor].mult)
+      // Show all 3 cards revealed for 900ms before advancing
+      setRevealFloor(currentFloor)
+      setTimeout(() => {
+        setRevealFloor(null)
+        if (currentFloor >= FLOORS.length - 1) {
+          setBal(b => b + earned)
+          setPayout(earned)
+          setPhase('won')
+          fetch('/api/game/session', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ game: 'tower', chips_wagered: bet, chips_won: earned }),
+          }).catch(() => {})
+        } else {
+          setFloor(currentFloor + 1)
+        }
+      }, 950)
     }
   }
 
   function cashOut() {
-    if (phase !== 'playing' || floor === 0) return
+    if (phase !== 'playing' || floor === 0 || revealFloor !== null) return
     const earned = safePayoutNow
     setBal(b => b + earned)
     setPayout(earned)
@@ -188,21 +196,34 @@ export default function TowerPage() {
     setPicks(Array(8).fill(null))
     setBombMap([])
     setPayout(0)
+    setRevealFloor(null)
   }
 
   // Which floor to show in the big card view
-  const displayFloor = phase === 'won' && picks[floor] === null ? floor - 1 : floor
+  const displayFloor = revealFloor !== null ? revealFloor
+    : phase === 'won' && picks[floor] === null ? floor - 1
+    : floor
 
   function getTileState(fi: number, ti: number): TileState {
     if (phase === 'idle') return 'unknown'
-    if (phase === 'playing') return 'active'
-    if (phase === 'dead') {
+    // Revealing a just-cleared floor — show all 3 cards
+    if (revealFloor !== null && fi === revealFloor) {
+      if (picks[fi] === ti) return 'safe'
+      return bombMap[fi]?.includes(ti) ? 'reveal-bomb' : 'reveal-safe'
+    }
+    // Active floor awaiting pick
+    if (phase === 'playing' && fi === floor && revealFloor === null) return 'active'
+    // Dead state
+    if (phase === 'dead' && fi === floor) {
       if (picks[fi] === ti) return 'bomb'
       return bombMap[fi]?.includes(ti) ? 'reveal-bomb' : 'reveal-safe'
     }
-    // won
-    if (picks[fi] === ti) return 'safe'
-    return 'reveal-safe'
+    // Won state — show what was picked on the display floor
+    if (phase === 'won' && fi === displayFloor) {
+      if (picks[fi] === ti) return 'safe'
+      return bombMap[fi]?.includes(ti) ? 'reveal-bomb' : 'reveal-safe'
+    }
+    return 'unknown'
   }
 
   // History: floors cleared before displayFloor
@@ -257,6 +278,9 @@ export default function TowerPage() {
               <span className="twr-fl-mult" style={{ color: FLOORS[displayFloor].mult >= 10 ? 'var(--gold-l)' : 'var(--cream-dim)' }}>
                 {mLabel(FLOORS[displayFloor].mult)}
               </span>
+              {revealFloor !== null && (
+                <span style={{ fontFamily: 'var(--fs-head)', fontSize: 11, letterSpacing: '.15em', color: '#5fd99a', textTransform: 'uppercase', marginLeft: 4 }}>Safe!</span>
+              )}
             </div>
           ) : (
             <div style={{ textAlign: 'center' }}>
@@ -265,13 +289,13 @@ export default function TowerPage() {
             </div>
           )}
 
-          {/* Big cards — animated on floor change */}
+          {/* Big cards — key changes on floor advance to trigger slide-in animation */}
           <div key={`cards-${displayFloor}-${phase}`} className="twr-big-cards" style={phase === 'idle' ? { opacity: 0.22, pointerEvents: 'none' } : undefined}>
             {[0, 1, 2].map(ti => (
               <TileCard
                 key={ti}
                 state={phase === 'idle' ? 'unknown' : getTileState(displayFloor, ti)}
-                onClick={phase === 'playing' ? () => pickTile(ti) : undefined}
+                onClick={phase === 'playing' && revealFloor === null ? () => pickTile(ti) : undefined}
                 floorIdx={displayFloor}
               />
             ))}
