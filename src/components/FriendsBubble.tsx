@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
@@ -9,12 +9,6 @@ interface Friend {
   display_name: string
   last_login: string | null
   activeGame: { code: string; game: string } | null
-}
-
-interface SearchResult {
-  id: string
-  display_name: string
-  invite_code: string
 }
 
 const GAME_ICONS: Record<string, string> = {
@@ -28,7 +22,6 @@ function isOnline(lastLogin: string | null) {
 
 export default function FriendsBubble() {
   const [open, setOpen] = useState(false)
-  const [tab, setTab] = useState<'friends' | 'search'>('friends')
   const [friends, setFriends] = useState<Friend[]>([])
   const [myCode, setMyCode] = useState('')
   const [addCode, setAddCode] = useState('')
@@ -37,12 +30,6 @@ export default function FriendsBubble() {
   const [adding, setAdding] = useState(false)
   const [codeCopied, setCodeCopied] = useState(false)
   const [loggedIn, setLoggedIn] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
-  const [searching, setSearching] = useState(false)
-  const [addingId, setAddingId] = useState<string | null>(null)
-  const [addedIds, setAddedIds] = useState<Set<string>>(new Set())
-  const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pathname = usePathname()
 
   const loadFriends = useCallback(async () => {
@@ -61,39 +48,6 @@ export default function FriendsBubble() {
     return () => clearInterval(id)
   }, [loadFriends])
 
-  useEffect(() => {
-    if (searchTimeout.current) clearTimeout(searchTimeout.current)
-    if (searchQuery.trim().length < 2) { setSearchResults([]); setSearching(false); return }
-    setSearching(true)
-    searchTimeout.current = setTimeout(async () => {
-      const res = await fetch(`/api/friends/search?q=${encodeURIComponent(searchQuery.trim())}`)
-      if (res.ok) {
-        const data = await res.json()
-        setSearchResults(data.results || [])
-      }
-      setSearching(false)
-    }, 350)
-  }, [searchQuery])
-
-  async function addFromSearch(result: SearchResult) {
-    if (addingId) return
-    setAddingId(result.id)
-    const res = await fetch('/api/friends', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ friendCode: result.invite_code }),
-    })
-    const data = await res.json()
-    if (res.ok) {
-      setAddedIds(prev => new Set([...prev, result.id]))
-      setSearchResults(prev => prev.filter(r => r.id !== result.id))
-      setTimeout(loadFriends, 500)
-    } else {
-      console.error(data.error)
-    }
-    setAddingId(null)
-  }
-
   async function addFriend() {
     if (!addCode.trim() || adding) return
     setAdding(true); setAddErr(''); setAddOk('')
@@ -107,7 +61,6 @@ export default function FriendsBubble() {
     if (res.ok) {
       setAddOk(`${data.name} added!`)
       setAddCode('')
-      // Optimistically add friend to list, then do a full reload
       setFriends(prev => [...prev, { id: data.id, display_name: data.name, last_login: null, activeGame: null }])
       setTimeout(loadFriends, 500)
     } else {
@@ -167,55 +120,10 @@ export default function FriendsBubble() {
           flexDirection: 'column', overflow: 'hidden', animation: 'floatUp .2s',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid rgba(217,182,90,.18)' }}>
-            <div style={{ display: 'flex', gap: 4 }}>
-              {(['friends', 'search'] as const).map(t => (
-                <button key={t} onClick={() => setTab(t)} style={{
-                  background: tab === t ? 'rgba(217,182,90,.18)' : 'none',
-                  border: tab === t ? '1px solid rgba(217,182,90,.4)' : '1px solid transparent',
-                  borderRadius: 8, padding: '4px 12px', cursor: 'pointer',
-                  color: tab === t ? 'var(--gold-l)' : 'var(--cream-faint)',
-                  fontSize: 11, fontFamily: 'var(--fs-head)', fontWeight: 700,
-                  letterSpacing: '.08em', textTransform: 'uppercase',
-                }}>
-                  {t === 'friends' ? '👥 Friends' : '🔍 Search'}
-                </button>
-              ))}
-            </div>
+            <span style={{ fontFamily: 'var(--fs-head)', fontWeight: 700, fontSize: 14, letterSpacing: '.08em', color: 'var(--gold-l)', textTransform: 'uppercase' }}>Friends</span>
             <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--cream-faint)', fontSize: 22, cursor: 'pointer', lineHeight: 1, padding: 0 }}>×</button>
           </div>
 
-          {tab === 'search' ? (
-            <div style={{ overflowY: 'auto', flex: 1, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <input
-                autoFocus
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Search by display name…"
-                style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(0,0,0,.4)', border: '1px solid rgba(217,182,90,.3)', borderRadius: 10, padding: '10px 14px', color: 'var(--gold-l)', fontSize: 13, fontFamily: 'var(--fs-head)', outline: 'none', letterSpacing: '.04em' }}
-              />
-              {searching && <div style={{ color: 'var(--cream-faint)', fontSize: 12, textAlign: 'center' }}>Searching…</div>}
-              {!searching && searchQuery.trim().length >= 2 && searchResults.length === 0 && (
-                <div style={{ color: 'var(--cream-faint)', fontSize: 13, textAlign: 'center', lineHeight: 1.5 }}>No players found.</div>
-              )}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {searchResults.map(r => (
-                  <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, background: 'rgba(255,255,255,.04)', border: '1px solid rgba(217,182,90,.1)' }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontFamily: 'var(--fs-head)', fontSize: 13, fontWeight: 700, color: 'var(--cream)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.display_name || 'Unknown'}</div>
-                      <div style={{ fontSize: 10, color: 'var(--cream-faint)', marginTop: 2, letterSpacing: '.1em' }}>{r.invite_code}</div>
-                    </div>
-                    <button
-                      onClick={() => addFromSearch(r)}
-                      disabled={addingId === r.id || addedIds.has(r.id)}
-                      style={{ padding: '5px 12px', borderRadius: 6, background: 'rgba(217,182,90,.15)', border: '1px solid rgba(217,182,90,.35)', color: 'var(--gold-l)', fontSize: 11, fontFamily: 'var(--fs-head)', fontWeight: 700, letterSpacing: '.06em', cursor: 'pointer', textTransform: 'uppercase', flexShrink: 0, opacity: addingId === r.id ? .6 : 1 }}
-                    >
-                      {addedIds.has(r.id) ? 'Added!' : addingId === r.id ? '…' : 'Add'}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
           <div style={{ overflowY: 'auto', flex: 1, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
             {/* Friend code */}
             <div>
@@ -230,7 +138,7 @@ export default function FriendsBubble() {
 
             {/* Add friend */}
             <div>
-              <div style={{ fontSize: 10, letterSpacing: '.15em', color: 'var(--cream-faint)', fontFamily: 'var(--fs-head)', textTransform: 'uppercase', marginBottom: 8 }}>Add by Code</div>
+              <div style={{ fontSize: 10, letterSpacing: '.15em', color: 'var(--cream-faint)', fontFamily: 'var(--fs-head)', textTransform: 'uppercase', marginBottom: 8 }}>Add Friend</div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <input
                   value={addCode}
@@ -287,7 +195,6 @@ export default function FriendsBubble() {
               )}
             </div>
           </div>
-          )}
         </div>
       )}
     </>

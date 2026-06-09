@@ -308,6 +308,7 @@ export default function AdminPage() {
   const [savingEvent, setSavingEvent] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [rooms, setRooms] = useState<GameRoom[]>([])
+  const [sessionSearch, setSessionSearch] = useState('')
   const [refreshing, setRefreshing] = useState(false)
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null)
   const [countdown, setCountdown] = useState(30)
@@ -935,11 +936,19 @@ export default function AdminPage() {
 
               {/* Game History section */}
               <div style={panelStyle}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, gap: 12, flexWrap: 'wrap' }}>
                   <h2 style={{ fontFamily: 'var(--fs-head)', fontWeight: 700, fontSize: 20, margin: 0 }}>
                     <span className="gold-text">Game History</span>
                   </h2>
-                  <span style={{ fontSize: 12, color: 'var(--cream-faint)', fontFamily: 'var(--fs-head)' }}>{allSessions.length} sessions</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, justifyContent: 'flex-end' }}>
+                    <input
+                      value={sessionSearch}
+                      onChange={e => setSessionSearch(e.target.value)}
+                      placeholder="Search player or game…"
+                      style={{ height: 34, padding: '0 12px', borderRadius: 8, background: 'rgba(0,0,0,.4)', border: '1px solid rgba(217,182,90,.25)', color: 'var(--gold-l)', fontSize: 13, fontFamily: 'var(--fs-head)', outline: 'none', width: 220 }}
+                    />
+                    <span style={{ fontSize: 12, color: 'var(--cream-faint)', fontFamily: 'var(--fs-head)', whiteSpace: 'nowrap' }}>{allSessions.length} sessions</span>
+                  </div>
                 </div>
                 {allSessions.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '36px 0', color: 'var(--cream-faint)', fontFamily: 'var(--fs-head)', letterSpacing: '.08em', fontSize: 14 }}>
@@ -957,7 +966,12 @@ export default function AdminPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {allSessions.map((s, idx) => {
+                        {allSessions.filter(s => {
+                          if (!sessionSearch.trim()) return true
+                          const q = sessionSearch.toLowerCase()
+                          const name = (playerMap[s.user_id] || '').toLowerCase()
+                          return name.includes(q) || s.game.toLowerCase().includes(q)
+                        }).map((s, idx) => {
                           const net = s.chips_won - s.chips_wagered
                           const playerName = playerMap[s.user_id] || 'Unknown'
                           return (
