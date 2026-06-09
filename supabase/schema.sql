@@ -119,3 +119,44 @@ create policy "Service role can do everything on rewards" on public.invite_rewar
 
 create policy "Service role can manage settings" on public.admin_settings
   for all using (auth.role() = 'service_role');
+
+-- ============================================================
+-- Sports betting tables
+-- Run this snippet in Supabase SQL editor to add sports betting
+-- ============================================================
+
+create table public.sports_events (
+  id uuid default gen_random_uuid() primary key,
+  sport text not null,
+  title text not null,
+  description text,
+  options jsonb not null default '[]',
+  closes_at timestamptz,
+  event_date timestamptz,
+  result_option_id text,
+  status text not null default 'open',
+  created_at timestamptz default now()
+);
+
+create table public.sports_bets (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users(id) not null,
+  event_id uuid references public.sports_events(id) not null,
+  option_id text not null,
+  option_label text not null,
+  chips_wagered integer not null check (chips_wagered > 0),
+  chips_won integer,
+  settled boolean default false,
+  won boolean,
+  created_at timestamptz default now(),
+  unique(user_id, event_id)
+);
+
+alter table public.sports_events enable row level security;
+alter table public.sports_bets enable row level security;
+
+create policy "Sports events public read" on public.sports_events for select using (true);
+create policy "Sports bets own read" on public.sports_bets for select using (auth.uid() = user_id);
+create policy "Sports bets own insert" on public.sports_bets for insert with check (auth.uid() = user_id);
+create policy "Service role manages sports events" on public.sports_events for all using (auth.role() = 'service_role');
+create policy "Service role manages sports bets" on public.sports_bets for all using (auth.role() = 'service_role');

@@ -41,6 +41,19 @@ interface Session {
 
 interface GameStat { game: string; count: number; total_wagered: number; total_won: number }
 
+interface AdminSportsEvent {
+  id: string
+  sport: string
+  title: string
+  description: string | null
+  options: { id: string; label: string }[]
+  closes_at: string | null
+  event_date: string | null
+  result_option_id: string | null
+  status: 'open' | 'closed' | 'settled' | 'cancelled'
+  created_at: string
+}
+
 interface PlayerGameStat { game: string; count: number; wagered: number; won: number }
 
 const DIRECTOR_EMAIL = 'vedantbhatia8@gmail.com'
@@ -287,7 +300,12 @@ export default function AdminPage() {
   const [toast, setToast] = useState<{ msg: string; kind: string } | null>(null)
   const [grantTarget, setGrantTarget] = useState('')
   const [grantAmount, setGrantAmount] = useState('')
-  const [activeTab, setActiveTab] = useState<'players' | 'stats' | 'live' | 'settings'>('players')
+  const [activeTab, setActiveTab] = useState<'players' | 'stats' | 'live' | 'settings' | 'sports'>('players')
+  const [sportsEvents, setSportsEvents] = useState<AdminSportsEvent[]>([])
+  const [showAddEvent, setShowAddEvent] = useState(false)
+  const [eventForm, setEventForm] = useState({ sport: 'nba', title: '', description: '', options: [{ id: 'a', label: '' }, { id: 'b', label: '' }], closes_at: '', event_date: '' })
+  const [settlingId, setSettlingId] = useState<string | null>(null)
+  const [savingEvent, setSavingEvent] = useState(false)
   const [rooms, setRooms] = useState<GameRoom[]>([])
   const [refreshing, setRefreshing] = useState(false)
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null)
@@ -349,6 +367,13 @@ export default function AdminPage() {
       setRooms(rd.rooms || [])
     }
 
+    // Load sports events
+    const sportsRes = await fetch('/api/admin/sports').catch(() => null)
+    if (sportsRes?.ok) {
+      const sd = await sportsRes.json()
+      setSportsEvents(sd.events || [])
+    }
+
     setLoading(false)
     setRefreshing(false)
     setLastRefreshed(new Date())
@@ -364,6 +389,64 @@ export default function AdminPage() {
       clearInterval(countdownRef.current!)
     }
   }, [load])
+
+  async function handleSportsAction(eventId: string, action: string, resultOptionId?: string) {
+    const res = await fetch('/api/admin/sports', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_id: eventId, action, result_option_id: resultOptionId }),
+    })
+    if (res.ok) {
+      const data = await res.json()
+      setSportsEvents(prev => prev.map(e => {
+        if (e.id !== eventId) return e
+        if (action === 'settle') return { ...e, status: 'settled', result_option_id: resultOptionId ?? null }
+        if (action === 'close') return { ...e, status: 'closed' }
+        if (action === 'cancel') return { ...e, status: 'cancelled' }
+        if (action === 'reopen') return { ...e, status: 'open', result_option_id: null }
+        return e
+      }))
+      setSettlingId(null)
+      if (action === 'settle') showToast(`Settled — ${data.settled} bets resolved`, 'win')
+      else if (action === 'cancel') showToast(`Cancelled — ${data.refunded} bets refunded`, '')
+      else showToast('Updated', 'win')
+    } else {
+      const err = await res.json()
+      showToast(err.error || 'Failed', 'lose')
+    }
+  }
+
+  async function handleCreateEvent() {
+    if (!eventForm.title.trim()) { showToast('Title required', ''); return }
+    const validOpts = eventForm.options.filter(o => o.label.trim())
+    if (validOpts.length < 2) { showToast('At least 2 options required', ''); return }
+    setSavingEvent(true)
+    const res = await fetch('/api/admin/sports', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...eventForm, options: validOpts, closes_at: eventForm.closes_at || null, event_date: eventForm.event_date || null }),
+    })
+    if (res.ok) {
+      const data = await res.json()
+      setSportsEvents(prev => [data.event, ...prev])
+      setShowAddEvent(false)
+      setEventForm({ sport: 'nba', title: '', description: '', options: [{ id: 'a', label: '' }, { id: 'b', label: '' }], closes_at: '', event_date: '' })
+      showToast('Event created', 'win')
+    } else {
+      const err = await res.json()
+      showToast(err.error || 'Failed', 'lose')
+    }
+    setSavingEvent(false)
+  }
+
+  async function handleDeleteEvent(eventId: string) {
+    if (!confirm('Delete this event and all its bets?')) return
+    const res = await fetch(`/api/admin/sports?id=${eventId}`, { method: 'DELETE' })
+    if (res.ok) {
+      setSportsEvents(prev => prev.filter(e => e.id !== eventId))
+      showToast('Deleted', '')
+    }
+  }
 
   async function handleBan(userId: string, banned: boolean) {
     const res = await fetch('/api/admin/ban-user', {
@@ -471,15 +554,18 @@ export default function AdminPage() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          {(['players', 'stats', 'live', 'settings'] as const).map(tab => (
+          {(['players', 'stats', 'live', 'sports', 'settings'] as const).map(tab => (
             <button key={tab} style={tabStyle(activeTab === tab)} onClick={() => setActiveTab(tab)}>
-              {tab === 'players' ? 'Players' : tab === 'stats' ? 'House Stats' : tab === 'live'
+              {tab === 'players' ? 'Players'
+                : tab === 'stats' ? 'House Stats'
+                : tab === 'live'
                 ? <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     {rooms.filter(r => r.status === 'active' || r.status === 'solo').length > 0 && (
                       <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#5fd99a', display: 'inline-block', boxShadow: '0 0 5px #5fd99a' }} />
                     )}
                     Games
                   </span>
+                : tab === 'sports' ? '🏆 Sports'
                 : 'Settings'}
             </button>
           ))}
@@ -884,6 +970,151 @@ export default function AdminPage() {
             </div>
           )
         })()}
+
+        {/* Sports tab */}
+        {activeTab === 'sports' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h2 style={{ fontFamily: 'var(--fs-head)', fontWeight: 700, fontSize: 20, margin: 0 }}>
+                <span className="gold-text">Sports Events</span>
+              </h2>
+              <button className="btn btn-sm" onClick={() => setShowAddEvent(true)}>+ Add Event</button>
+            </div>
+
+            {/* Add Event form */}
+            {showAddEvent && (
+              <div style={{ ...panelStyle, padding: 24 }}>
+                <div style={{ fontFamily: 'var(--fs-head)', fontWeight: 700, fontSize: 16, marginBottom: 18 }}>New Event</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                  <div>
+                    <label style={{ fontSize: 11, color: 'var(--cream-faint)', fontFamily: 'var(--fs-head)', letterSpacing: '.15em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Sport</label>
+                    <select value={eventForm.sport} onChange={e => setEventForm(f => ({ ...f, sport: e.target.value }))}
+                      style={{ width: '100%', height: 40, padding: '0 12px', borderRadius: 8, background: 'rgba(0,0,0,.5)', border: '1px solid rgba(217,182,90,.25)', color: 'var(--cream)', fontSize: 14 }}>
+                      {['nba','nfl','soccer','mlb','pga','tennis','ufc','esports','nhl','other'].map(s => (
+                        <option key={s} value={s}>{s.toUpperCase()}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, color: 'var(--cream-faint)', fontFamily: 'var(--fs-head)', letterSpacing: '.15em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Event Date (optional)</label>
+                    <input type="datetime-local" value={eventForm.event_date} onChange={e => setEventForm(f => ({ ...f, event_date: e.target.value }))}
+                      style={{ width: '100%', height: 40, padding: '0 12px', borderRadius: 8, background: 'rgba(0,0,0,.5)', border: '1px solid rgba(217,182,90,.25)', color: 'var(--cream)', fontSize: 14 }} />
+                  </div>
+                </div>
+                <div style={{ marginBottom: 12 }}>
+                  <label style={{ fontSize: 11, color: 'var(--cream-faint)', fontFamily: 'var(--fs-head)', letterSpacing: '.15em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Title *</label>
+                  <input placeholder="e.g. Lakers vs Warriors – Game 7" value={eventForm.title} onChange={e => setEventForm(f => ({ ...f, title: e.target.value }))}
+                    style={{ width: '100%', height: 42, padding: '0 14px', borderRadius: 8, background: 'rgba(0,0,0,.5)', border: '1px solid rgba(217,182,90,.25)', color: 'var(--cream)', fontSize: 14 }} />
+                </div>
+                <div style={{ marginBottom: 12 }}>
+                  <label style={{ fontSize: 11, color: 'var(--cream-faint)', fontFamily: 'var(--fs-head)', letterSpacing: '.15em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Description (optional)</label>
+                  <input placeholder="Additional context…" value={eventForm.description} onChange={e => setEventForm(f => ({ ...f, description: e.target.value }))}
+                    style={{ width: '100%', height: 40, padding: '0 14px', borderRadius: 8, background: 'rgba(0,0,0,.5)', border: '1px solid rgba(217,182,90,.25)', color: 'var(--cream)', fontSize: 13 }} />
+                </div>
+                <div style={{ marginBottom: 12 }}>
+                  <label style={{ fontSize: 11, color: 'var(--cream-faint)', fontFamily: 'var(--fs-head)', letterSpacing: '.15em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Betting Closes (optional)</label>
+                  <input type="datetime-local" value={eventForm.closes_at} onChange={e => setEventForm(f => ({ ...f, closes_at: e.target.value }))}
+                    style={{ width: 240, height: 40, padding: '0 12px', borderRadius: 8, background: 'rgba(0,0,0,.5)', border: '1px solid rgba(217,182,90,.25)', color: 'var(--cream)', fontSize: 14 }} />
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ fontSize: 11, color: 'var(--cream-faint)', fontFamily: 'var(--fs-head)', letterSpacing: '.15em', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>Options * (min 2)</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {eventForm.options.map((opt, i) => (
+                      <div key={opt.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <input placeholder={`Option ${i + 1} label`} value={opt.label}
+                          onChange={e => setEventForm(f => ({ ...f, options: f.options.map((o, j) => j === i ? { ...o, label: e.target.value } : o) }))}
+                          style={{ flex: 1, height: 38, padding: '0 12px', borderRadius: 8, background: 'rgba(0,0,0,.5)', border: '1px solid rgba(217,182,90,.2)', color: 'var(--cream)', fontSize: 13 }} />
+                        {eventForm.options.length > 2 && (
+                          <button onClick={() => setEventForm(f => ({ ...f, options: f.options.filter((_, j) => j !== i) }))}
+                            style={{ background: 'none', border: 'none', color: '#e7708a', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>×</button>
+                        )}
+                      </div>
+                    ))}
+                    {eventForm.options.length < 4 && (
+                      <button onClick={() => setEventForm(f => ({ ...f, options: [...f.options, { id: String.fromCharCode(97 + f.options.length), label: '' }] }))}
+                        style={{ alignSelf: 'flex-start', background: 'rgba(217,182,90,.08)', border: '1px dashed rgba(217,182,90,.3)', borderRadius: 8, padding: '6px 14px', color: 'var(--cream-dim)', cursor: 'pointer', fontSize: 12, fontFamily: 'var(--fs-head)' }}>
+                        + Add Option
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button className="btn" onClick={handleCreateEvent} disabled={savingEvent} style={{ opacity: savingEvent ? .6 : 1 }}>
+                    {savingEvent ? 'Creating…' : 'Create Event'}
+                  </button>
+                  <button className="btn btn-ghost" onClick={() => setShowAddEvent(false)}>Cancel</button>
+                </div>
+              </div>
+            )}
+
+            {/* Event list */}
+            {sportsEvents.length === 0 ? (
+              <div style={{ ...panelStyle, textAlign: 'center', padding: '40px 20px', color: 'var(--cream-faint)', fontFamily: 'var(--fs-head)', letterSpacing: '.1em' }}>
+                No events yet — add one above
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {sportsEvents.map(event => (
+                  <div key={event.id} style={{ ...panelStyle, padding: '18px 22px' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
+                          <span style={{ fontFamily: 'var(--fs-head)', fontSize: 10, letterSpacing: '.2em', textTransform: 'uppercase', color: 'var(--gold)', fontWeight: 700 }}>{event.sport.toUpperCase()}</span>
+                          <span style={{
+                            padding: '2px 8px', borderRadius: 999, fontSize: 10, fontFamily: 'var(--fs-head)', letterSpacing: '.1em', textTransform: 'uppercase',
+                            background: event.status === 'open' ? 'rgba(95,217,154,.12)' : event.status === 'settled' ? 'rgba(74,144,217,.12)' : event.status === 'cancelled' ? 'rgba(231,112,138,.1)' : 'rgba(255,255,255,.06)',
+                            border: event.status === 'open' ? '1px solid rgba(95,217,154,.3)' : event.status === 'settled' ? '1px solid rgba(74,144,217,.3)' : event.status === 'cancelled' ? '1px solid rgba(231,112,138,.25)' : '1px solid rgba(255,255,255,.12)',
+                            color: event.status === 'open' ? '#5fd99a' : event.status === 'settled' ? '#4a90d9' : event.status === 'cancelled' ? '#e7708a' : 'var(--cream-faint)',
+                          }}>{event.status}</span>
+                          {event.event_date && <span style={{ fontSize: 11, color: 'var(--cream-faint)' }}>{new Date(event.event_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>}
+                        </div>
+                        <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--cream)', marginBottom: 6 }}>{event.title}</div>
+                        {event.description && <div style={{ fontSize: 12, color: 'var(--cream-dim)', marginBottom: 8 }}>{event.description}</div>}
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          {event.options.map(opt => (
+                            <span key={opt.id} style={{
+                              padding: '3px 10px', borderRadius: 999, fontSize: 11, fontFamily: 'var(--fs-head)',
+                              background: event.result_option_id === opt.id ? 'rgba(95,217,154,.15)' : 'rgba(255,255,255,.05)',
+                              border: event.result_option_id === opt.id ? '1px solid rgba(95,217,154,.4)' : '1px solid rgba(217,182,90,.15)',
+                              color: event.result_option_id === opt.id ? '#5fd99a' : 'var(--cream-dim)',
+                            }}>{opt.label}{event.result_option_id === opt.id ? ' ✓' : ''}</span>
+                          ))}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end', flexShrink: 0 }}>
+                        {event.status === 'open' && (
+                          <button onClick={() => handleSportsAction(event.id, 'close')} className="btn btn-sm btn-ghost" style={{ fontSize: 11 }}>Close Betting</button>
+                        )}
+                        {(event.status === 'open' || event.status === 'closed') && settlingId !== event.id && (
+                          <button onClick={() => setSettlingId(event.id)} className="btn btn-sm" style={{ fontSize: 11 }}>Settle</button>
+                        )}
+                        {settlingId === event.id && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+                            <div style={{ fontSize: 11, color: 'var(--cream-faint)', fontFamily: 'var(--fs-head)', letterSpacing: '.1em', marginBottom: 4 }}>PICK WINNER:</div>
+                            {event.options.map(opt => (
+                              <button key={opt.id} onClick={() => handleSportsAction(event.id, 'settle', opt.id)}
+                                className="btn btn-sm" style={{ fontSize: 11, background: 'var(--gold-grad)', color: '#2a1f08' }}>
+                                {opt.label}
+                              </button>
+                            ))}
+                            <button onClick={() => setSettlingId(null)} className="btn btn-sm btn-ghost" style={{ fontSize: 11 }}>Cancel</button>
+                          </div>
+                        )}
+                        {event.status === 'settled' && (
+                          <button onClick={() => handleSportsAction(event.id, 'reopen')} className="btn btn-sm btn-ghost" style={{ fontSize: 11 }}>Re-open</button>
+                        )}
+                        {event.status !== 'cancelled' && event.status !== 'settled' && (
+                          <button onClick={() => handleSportsAction(event.id, 'cancel')} className="btn btn-sm btn-ghost" style={{ fontSize: 11, color: '#e7708a', borderColor: 'rgba(231,112,138,.3)' }}>Cancel & Refund</button>
+                        )}
+                        <button onClick={() => handleDeleteEvent(event.id)} style={{ background: 'none', border: 'none', color: 'rgba(231,112,138,.5)', cursor: 'pointer', fontSize: 11, fontFamily: 'var(--fs-head)', padding: '4px 0' }}>Delete</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Settings tab */}
         {activeTab === 'settings' && (
