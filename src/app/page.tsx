@@ -450,34 +450,9 @@ function LobbyContent() {
               </div>
             </div>
           </Link>
-          {/* Sports Betting */}
-          <Link href="/sports" style={{
-            gridColumn:'span 3',position:'relative',borderRadius:'var(--radius-lg)',overflow:'hidden',cursor:'pointer',
-            textDecoration:'none',color:'inherit',border:'1px solid rgba(217,182,90,.32)',
-            boxShadow:'var(--shadow-pop)',transition:'transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s, border-color .25s',
-            display:'flex',flexDirection:'column',minHeight:200,
-          }} className="game">
-            <div style={{flex:1,position:'relative',display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',background:'radial-gradient(120% 100% at 50% 0%, #1a0a1a 0%, #0b0a0e 60%, #090908 100%)'}}>
-              <div style={{zIndex:2,position:'relative',display:'flex',gap:16,alignItems:'center',fontSize:48}}>
-                <span style={{filter:'drop-shadow(0 0 16px rgba(243,115,33,.7))'}}>🏀</span>
-                <span style={{filter:'drop-shadow(0 0 16px rgba(74,144,217,.7))'}}>🏈</span>
-                <span style={{filter:'drop-shadow(0 0 16px rgba(76,175,80,.7))'}}>⚽</span>
-                <span style={{filter:'drop-shadow(0 0 16px rgba(217,182,90,.5))'}}>⛳</span>
-              </div>
-              <div style={{position:'absolute',inset:0,background:'radial-gradient(120% 100% at 50% 120%, transparent 40%, rgba(0,0,0,.5))'}}/>
-            </div>
-            <div style={{padding:'20px 24px',background:'linear-gradient(180deg, rgba(19,17,11,.6), var(--ink-900))',borderTop:'1px solid rgba(217,182,90,.25)',position:'relative',zIndex:2}}>
-              <h3 style={{fontFamily:'var(--fs-head)',fontWeight:700,fontSize:23,margin:0,letterSpacing:'.04em'}}>Sports Book</h3>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:8}}>
-                <span style={{color:'var(--cream-faint)',fontSize:13}}>Predict real events · Win 2× your chips</span>
-                <span style={{fontFamily:'var(--fs-head)',fontSize:12,letterSpacing:'.14em',color:'var(--gold-l)',textTransform:'uppercase'}}>Place bets →</span>
-              </div>
-            </div>
-          </Link>
-
           {/* Tower of Chance */}
           <Link href="/tower" style={{
-            gridColumn:'span 3',position:'relative',borderRadius:'var(--radius-lg)',overflow:'hidden',cursor:'pointer',
+            gridColumn:'span 2',position:'relative',borderRadius:'var(--radius-lg)',overflow:'hidden',cursor:'pointer',
             textDecoration:'none',color:'inherit',border:'1px solid rgba(217,182,90,.35)',
             boxShadow:'var(--shadow-pop)',transition:'transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s, border-color .25s',
             display:'flex',flexDirection:'column',minHeight:340,
@@ -504,6 +479,31 @@ function LobbyContent() {
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:8}}>
                 <span style={{color:'var(--cream-faint)',fontSize:13}}>Pick a card, avoid the bomb, climb 8 floors</span>
                 <span style={{fontFamily:'var(--fs-head)',fontSize:12,letterSpacing:'.14em',color:'var(--gold-l)',textTransform:'uppercase'}}>Start climb →</span>
+              </div>
+            </div>
+          </Link>
+
+          {/* Sports Betting — row 3, centre column */}
+          <Link href="/sports" style={{
+            gridColumn:'3 / 5',position:'relative',borderRadius:'var(--radius-lg)',overflow:'hidden',cursor:'pointer',
+            textDecoration:'none',color:'inherit',border:'1px solid rgba(217,182,90,.32)',
+            boxShadow:'var(--shadow-pop)',transition:'transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s, border-color .25s',
+            display:'flex',flexDirection:'column',minHeight:340,
+          }} className="game">
+            <div style={{flex:1,position:'relative',display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',background:'radial-gradient(120% 100% at 50% 0%, #1a0a1a 0%, #0b0a0e 60%, #090908 100%)'}}>
+              <div style={{zIndex:2,position:'relative',display:'flex',gap:16,alignItems:'center',fontSize:48}}>
+                <span style={{filter:'drop-shadow(0 0 16px rgba(243,115,33,.7))'}}>🏀</span>
+                <span style={{filter:'drop-shadow(0 0 16px rgba(74,144,217,.7))'}}>🏈</span>
+                <span style={{filter:'drop-shadow(0 0 16px rgba(76,175,80,.7))'}}>⚽</span>
+                <span style={{filter:'drop-shadow(0 0 16px rgba(217,182,90,.5))'}}>⛳</span>
+              </div>
+              <div style={{position:'absolute',inset:0,background:'radial-gradient(120% 100% at 50% 120%, transparent 40%, rgba(0,0,0,.5))'}}/>
+            </div>
+            <div style={{padding:'20px 24px',background:'linear-gradient(180deg, rgba(19,17,11,.6), var(--ink-900))',borderTop:'1px solid rgba(217,182,90,.25)',position:'relative',zIndex:2}}>
+              <h3 style={{fontFamily:'var(--fs-head)',fontWeight:700,fontSize:23,margin:0,letterSpacing:'.04em'}}>Sports Book</h3>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:8}}>
+                <span style={{color:'var(--cream-faint)',fontSize:13}}>Predict real events · Win 2× your chips</span>
+                <span style={{fontFamily:'var(--fs-head)',fontSize:12,letterSpacing:'.14em',color:'var(--gold-l)',textTransform:'uppercase'}}>Place bets →</span>
               </div>
             </div>
           </Link>
