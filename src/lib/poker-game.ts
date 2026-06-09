@@ -1,4 +1,4 @@
-import { Card, evaluate, cmp, rankName, strength } from './poker-engine'
+import { Card, evaluate, cmp, rankName, strength, preflopTier, drawEquity } from './poker-engine'
 
 export const SB = 500
 export const BB = 1000
@@ -302,37 +302,124 @@ export class PokerGame {
   botDecision(): { type: string; amount?: number } {
     const p = this.players[this.toAct]
     const toCall = this.currentBet - p.bet
-    const s = strength(p.hole, this.community) + (Math.random() * 0.12 - 0.06)
-    const potOdds = toCall / (this.pot + toCall || 1)
     const L = this.legal()!
     const roundTo = (x: number) => Math.max(BB, Math.round(x / BB) * BB)
 
+    // Position: act in the back half of post-flop order = in position (acts later)
+    const activeOrder = this.seatedOrderFrom(this.button + 1).filter(q => !q.folded && !q.sittingOut)
+    const inPosition = activeOrder.indexOf(p) >= Math.ceil(activeOrder.length / 2)
+    const jitter = Math.random() * 0.06 - 0.03
+
+    // ── PREFLOP ──────────────────────────────────────────────────────────────
+    if (this.street === 'preflop') {
+      const tier = preflopTier(p.hole)
+
+      // Tier 1: QQ+, AK — 3-bet/raise every time, never fold
+      if (tier === 1) {
+        if (L.canRaise && this.raisesThisStreet < 4) {
+          const mult = toCall > 0 ? 3 : 2.5
+          const bet = roundTo(Math.max(this.currentBet * mult, BB * 3))
+          const target = Math.min(bet, L.maxRaiseTo)
+          if (target >= L.minRaiseTo) return { type: 'raise', amount: target }
+        }
+        return toCall > 0 ? { type: 'call' } : { type: 'check' }
+      }
+
+      // Tier 2: 99-JJ, AQ, AJs+ — raise, 3-bet in position, call 3-bets
+      if (tier === 2) {
+        if (L.canRaise && this.raisesThisStreet < 3) {
+          const bet = roundTo(Math.max(this.currentBet * 2.5, BB * 3))
+          const target = Math.min(bet, L.maxRaiseTo)
+          if (target >= L.minRaiseTo) return { type: 'raise', amount: target }
+        }
+        if (toCall <= p.stack * 0.3) return { type: 'call' }
+        return { type: 'fold' }
+      }
+
+      // Tier 3: 55-88, A7+, KQ, suited connectors — raise/call based on price and position
+      if (tier === 3) {
+        if (toCall === 0) {
+          if (L.canRaise && (inPosition || Math.random() < 0.5)) {
+            const bet = roundTo(BB * 2.5)
+            const target = Math.min(bet, L.maxRaiseTo)
+            if (target >= L.minRaiseTo && Math.random() < 0.7) return { type: 'raise', amount: target }
+          }
+          return { type: 'check' }
+        }
+        if (inPosition && toCall <= BB * 6) return { type: 'call' }
+        if (toCall <= BB * 3) return { type: 'call' }
+        return { type: 'fold' }
+      }
+
+      // Tier 4: small pairs, weak suited connectors — limp/call cheap only
+      if (tier === 4) {
+        if (toCall === 0) return { type: 'check' }
+        if (inPosition && toCall <= BB * 2) return { type: 'call' }
+        if (toCall <= BB) return { type: 'call' }
+        return { type: 'fold' }
+      }
+
+      // Tier 5: trash — fold to any bet, occasionally defend BB
+      if (toCall === 0) return { type: 'check' }
+      if (toCall <= BB && Math.random() < 0.12) return { type: 'call' }
+      return { type: 'fold' }
+    }
+
+    // ── POST-FLOP ─────────────────────────────────────────────────────────────
+    const rawStr = strength(p.hole, this.community)
+    const draws = drawEquity(p.hole, this.community)
+    const totalEquity = Math.min(1, rawStr + draws * 0.55) + jitter
+    const potOdds = toCall / (this.pot + toCall || 1)
+
     if (toCall === 0) {
-      if (s > 0.6 && this.raisesThisStreet < 3) {
-        const bet = roundTo(this.pot * (0.45 + Math.random() * 0.4))
+      // Value bet: size up with stronger hands
+      if (rawStr >= 0.62 && L.canRaise && this.raisesThisStreet < 3) {
+        const sizeFrac = rawStr > 0.82 ? 0.8 : rawStr > 0.72 ? 0.62 : 0.5
+        const bet = roundTo(this.pot * sizeFrac)
+        const target = Math.min(p.bet + bet, L.maxRaiseTo)
+        if (target >= L.minRaiseTo) return { type: 'raise', amount: target }
+        return { type: 'check' }
+      }
+      // Semi-bluff with draws in position
+      if (draws >= 0.16 && inPosition && L.canRaise && this.raisesThisStreet < 2 && Math.random() < 0.55) {
+        const bet = roundTo(this.pot * 0.5)
         const target = Math.min(p.bet + bet, L.maxRaiseTo)
         if (target >= L.minRaiseTo) return { type: 'raise', amount: target }
       }
-      if (s > 0.5 && Math.random() < 0.35) {
-        const bet2 = roundTo(this.pot * 0.4)
-        const t2 = Math.min(p.bet + bet2, L.maxRaiseTo)
-        if (t2 >= L.minRaiseTo) return { type: 'raise', amount: t2 }
+      // Occasional bluff in position with nothing
+      if (inPosition && rawStr < 0.3 && draws < 0.1 && L.canRaise && this.raisesThisStreet < 2 && Math.random() < 0.15) {
+        const bet = roundTo(this.pot * 0.42)
+        const target = Math.min(p.bet + bet, L.maxRaiseTo)
+        if (target >= L.minRaiseTo) return { type: 'raise', amount: target }
       }
       return { type: 'check' }
     }
-    // Strong hands (premium holdings) always call, even all-ins
-    if (s > 0.75) {
-      if (s > 0.85 && this.raisesThisStreet < 4 && p.stack > toCall) {
-        const rr = roundTo(this.currentBet + this.pot * (0.6 + Math.random() * 0.5))
-        const rt = Math.min(rr, L.maxRaiseTo)
-        if (rt >= L.minRaiseTo) return { type: 'raise', amount: rt }
+
+    // Facing a bet — monster hand: raise for value
+    if (rawStr >= 0.78 && L.canRaise && this.raisesThisStreet < 4) {
+      const bet = roundTo(toCall * 2.5 + this.pot * 0.35)
+      const target = Math.min(p.bet + bet, L.maxRaiseTo)
+      if (target >= L.minRaiseTo && Math.random() < 0.7) return { type: 'raise', amount: target }
+      return { type: 'call' }
+    }
+
+    // Good hand (top pair+): call or sometimes raise
+    if (rawStr >= 0.62) {
+      if (L.canRaise && this.raisesThisStreet < 3 && Math.random() < 0.3) {
+        const bet = roundTo(toCall * 2.2 + this.pot * 0.25)
+        const target = Math.min(p.bet + bet, L.maxRaiseTo)
+        if (target >= L.minRaiseTo) return { type: 'raise', amount: target }
       }
       return { type: 'call' }
     }
-    // Medium hands: call when equity beats pot odds
-    if (s > potOdds + 0.08) return { type: 'call' }
-    // Loose call on cheap bets with decent hand
-    if (s > 0.35 && toCall <= p.stack * 0.15 && Math.random() < 0.45) return { type: 'call' }
+
+    // Draws and medium hands: pot odds + implied odds
+    if (totalEquity > potOdds + 0.04) return { type: 'call' }
+    if (draws >= 0.16 && potOdds < 0.28) return { type: 'call' }
+
+    // Marginal hand with cheap call
+    if (totalEquity > 0.3 && toCall <= p.stack * 0.1 && Math.random() < 0.4) return { type: 'call' }
+
     return { type: 'fold' }
   }
 

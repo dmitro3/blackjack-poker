@@ -105,3 +105,53 @@ function postStrength(hole: Card[], board: Card[]): number {
 export function strength(hole: Card[], board: Card[]): number {
   return board.length === 0 ? preflopStrength(hole) : postStrength(hole, board)
 }
+
+// Classify preflop hand: 1=premium, 2=strong, 3=playable, 4=marginal, 5=trash
+export function preflopTier(hole: Card[]): number {
+  const a = VAL[hole[0].rank], b = VAL[hole[1].rank]
+  const hi = Math.max(a, b), lo = Math.min(a, b)
+  const suited = hole[0].suit === hole[1].suit
+  const paired = a === b
+  if (paired && hi >= 12) return 1               // QQ+
+  if (hi === 14 && lo === 13) return 1           // AK
+  if (paired && hi >= 9) return 2                // 99-JJ
+  if (hi === 14 && lo >= 11) return 2            // AQ, AJ
+  if (hi === 13 && lo >= 11 && suited) return 2  // KQs, KJs
+  if (hi === 14 && lo >= 9 && suited) return 2   // ATs+
+  if (paired && hi >= 5) return 3                // 55-88
+  if (hi === 14 && lo >= 7) return 3             // A7+
+  if (hi >= 13 && lo >= 10) return 3             // KQ, KJ, QJ
+  if (suited && hi - lo <= 2 && hi >= 8) return 3 // suited connectors 8-high+
+  if (paired) return 4                           // 22-44
+  if (hi === 14) return 4                        // A low
+  if (suited && hi - lo <= 3 && hi >= 6) return 4 // weak suited connectors
+  if (hi >= 10 && lo >= 8 && hi - lo <= 3) return 4 // offsuit connectors
+  return 5
+}
+
+// Estimate bonus equity from flush/straight draws (0 to ~0.3)
+export function drawEquity(hole: Card[], board: Card[]): number {
+  if (board.length === 0 || board.length >= 5) return 0
+  const all = hole.concat(board)
+  const suits: Record<string, number> = {}
+  const valSet: Set<number> = new Set()
+  all.forEach(c => {
+    suits[c.suit] = (suits[c.suit] || 0) + 1
+    valSet.add(VAL[c.rank])
+  })
+  if (valSet.has(14)) valSet.add(1)
+  const streetsLeft = board.length <= 3 ? 2 : 1
+  let bonus = 0
+  // Flush draw
+  if (Math.max(...Object.values(suits)) === 4) bonus += streetsLeft === 2 ? 0.21 : 0.16
+  // Straight draw
+  const sorted = [...valSet].sort((a, b) => a - b)
+  let best = 1, run = 1
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i] === sorted[i-1] + 1) { run++; best = Math.max(best, run) }
+    else run = 1
+  }
+  if (best >= 4) bonus += streetsLeft === 2 ? 0.18 : 0.14       // open-ender
+  else if (best === 3) bonus += streetsLeft === 2 ? 0.09 : 0.05  // gutshot
+  return Math.min(bonus, 0.32)
+}
