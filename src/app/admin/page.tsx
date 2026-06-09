@@ -306,6 +306,7 @@ export default function AdminPage() {
   const [eventForm, setEventForm] = useState({ sport: 'nba', title: '', description: '', options: [{ id: 'a', label: '' }, { id: 'b', label: '' }], closes_at: '', event_date: '' })
   const [settlingId, setSettlingId] = useState<string | null>(null)
   const [savingEvent, setSavingEvent] = useState(false)
+  const [syncing, setSyncing] = useState(false)
   const [rooms, setRooms] = useState<GameRoom[]>([])
   const [refreshing, setRefreshing] = useState(false)
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null)
@@ -437,6 +438,21 @@ export default function AdminPage() {
       showToast(err.error || 'Failed', 'lose')
     }
     setSavingEvent(false)
+  }
+
+  async function handleSyncOdds() {
+    setSyncing(true)
+    const res = await fetch('/api/sports/sync', { method: 'POST' })
+    if (res.ok) {
+      const data = await res.json()
+      showToast(`Synced — ${data.created} new events, ${data.settled} bets settled`, 'win')
+      // Reload sports events
+      const sportsRes = await fetch('/api/admin/sports')
+      if (sportsRes.ok) { const sd = await sportsRes.json(); setSportsEvents(sd.events || []) }
+    } else {
+      showToast('Sync failed — check ODDS_API_KEY', 'lose')
+    }
+    setSyncing(false)
   }
 
   async function handleDeleteEvent(eventId: string) {
@@ -974,11 +990,17 @@ export default function AdminPage() {
         {/* Sports tab */}
         {activeTab === 'sports' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
               <h2 style={{ fontFamily: 'var(--fs-head)', fontWeight: 700, fontSize: 20, margin: 0 }}>
                 <span className="gold-text">Sports Events</span>
               </h2>
-              <button className="btn btn-sm" onClick={() => setShowAddEvent(true)}>+ Add Event</button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn btn-sm" onClick={handleSyncOdds} disabled={syncing}
+                  style={{ opacity: syncing ? .6 : 1, background: 'linear-gradient(135deg,#137a4a,#0c5a37)', border: 'none' }}>
+                  {syncing ? '⟳ Syncing…' : '⟳ Sync from Odds API'}
+                </button>
+                <button className="btn btn-sm" onClick={() => setShowAddEvent(true)}>+ Add Event</button>
+              </div>
             </div>
 
             {/* Add Event form */}
