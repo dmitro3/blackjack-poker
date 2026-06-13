@@ -11,6 +11,7 @@ const SPORTS = [
   { key: 'americanfootball_nfl',      sport: 'nfl',    label: 'NFL',                   hasDraw: false },
   { key: 'baseball_mlb',              sport: 'mlb',    label: 'MLB',                   hasDraw: false },
   { key: 'icehockey_nhl',             sport: 'nhl',    label: 'NHL',                   hasDraw: false },
+  { key: 'soccer_fifa_world_cup',      sport: 'soccer', label: 'FIFA World Cup',        hasDraw: true  },
   { key: 'soccer_epl',                sport: 'soccer', label: 'EPL',                   hasDraw: true  },
   { key: 'soccer_spain_la_liga',      sport: 'soccer', label: 'La Liga',               hasDraw: true  },
   { key: 'soccer_uefa_champs_league', sport: 'soccer', label: 'Champions League',      hasDraw: true  },
