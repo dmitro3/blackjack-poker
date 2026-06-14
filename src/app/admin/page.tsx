@@ -56,6 +56,19 @@ interface AdminSportsEvent {
 
 interface PlayerGameStat { game: string; count: number; wagered: number; won: number }
 
+interface SportsBet {
+  user_id: string
+  event_id: string
+  chips_wagered: number
+  chips_won: number
+  won: boolean | null
+  settled: boolean
+  option_id: string
+  display_name: string
+  event_title: string
+  sport: string
+}
+
 const DIRECTOR_EMAIL = 'vedantbhatia8@gmail.com'
 
 function getOnlineStatus(lastLogin: string | null): 'online' | 'recent' | 'offline' {
@@ -302,6 +315,7 @@ export default function AdminPage() {
   const [grantAmount, setGrantAmount] = useState('')
   const [activeTab, setActiveTab] = useState<'players' | 'stats' | 'live' | 'settings' | 'sports'>('players')
   const [sportsEvents, setSportsEvents] = useState<AdminSportsEvent[]>([])
+  const [sportsBets, setSportsBets] = useState<SportsBet[]>([])
   const [showAddEvent, setShowAddEvent] = useState(false)
   const [eventForm, setEventForm] = useState({ sport: 'nba', title: '', description: '', options: [{ id: 'a', label: '' }, { id: 'b', label: '' }], closes_at: '', event_date: '' })
   const [settlingId, setSettlingId] = useState<string | null>(null)
@@ -374,6 +388,7 @@ export default function AdminPage() {
     if (sportsRes?.ok) {
       const sd = await sportsRes.json()
       setSportsEvents(sd.events || [])
+      setSportsBets(sd.bets || [])
     }
 
     setLoading(false)
@@ -449,7 +464,7 @@ export default function AdminPage() {
       showToast(`Synced — ${data.created} new events, ${data.settled} bets settled`, 'win')
       // Reload sports events
       const sportsRes = await fetch('/api/admin/sports')
-      if (sportsRes.ok) { const sd = await sportsRes.json(); setSportsEvents(sd.events || []) }
+      if (sportsRes.ok) { const sd = await sportsRes.json(); setSportsEvents(sd.events || []); setSportsBets(sd.bets || []) }
     } else {
       showToast('Sync failed — check ODDS_API_KEY', 'lose')
     }
@@ -1149,6 +1164,63 @@ export default function AdminPage() {
                 ))}
               </div>
             )}
+
+            {/* Bettor breakdown */}
+            <div style={panelStyle}>
+              <h3 style={{ fontFamily: 'var(--fs-head)', fontWeight: 700, fontSize: 16, margin: '0 0 16px', letterSpacing: '.04em' }}>
+                <span className="gold-text">Player Bets</span>
+                <span style={{ fontWeight: 400, fontSize: 12, color: 'var(--cream-faint)', marginLeft: 10 }}>
+                  {sportsBets.length} total
+                </span>
+              </h3>
+              {sportsBets.length === 0 ? (
+                <div style={{ color: 'var(--cream-faint)', fontSize: 13, padding: '20px 0' }}>No bets placed yet.</div>
+              ) : (() => {
+                // Aggregate by player
+                const byPlayer: Record<string, { display_name: string; total: number; sports: Record<string, number> }> = {}
+                for (const b of sportsBets) {
+                  if (!byPlayer[b.user_id]) byPlayer[b.user_id] = { display_name: b.display_name, total: 0, sports: {} }
+                  byPlayer[b.user_id].total += b.chips_wagered
+                  const key = b.sport.toUpperCase()
+                  byPlayer[b.user_id].sports[key] = (byPlayer[b.user_id].sports[key] || 0) + b.chips_wagered
+                }
+                const rows = Object.values(byPlayer).sort((a, b) => b.total - a.total)
+                return (
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid rgba(217,182,90,.2)' }}>
+                        {['Player', 'Sport Breakdown', 'Total Wagered'].map(h => (
+                          <th key={h} style={{ padding: '8px 12px', textAlign: h === 'Total Wagered' ? 'right' : 'left', fontFamily: 'var(--fs-head)', fontSize: 11, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--cream-faint)', fontWeight: 600 }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((row, i) => (
+                        <tr key={i} style={{ borderBottom: '1px solid rgba(217,182,90,.07)' }}>
+                          <td style={{ padding: '12px', fontWeight: 600, color: 'var(--cream)', fontSize: 14 }}>{row.display_name}</td>
+                          <td style={{ padding: '12px' }}>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                              {Object.entries(row.sports).sort((a, b) => b[1] - a[1]).map(([sport, amt]) => (
+                                <span key={sport} style={{
+                                  fontSize: 11, padding: '2px 8px', borderRadius: 999,
+                                  background: 'rgba(217,182,90,.1)', border: '1px solid rgba(217,182,90,.2)',
+                                  color: 'var(--cream-dim)', fontFamily: 'var(--fs-head)', letterSpacing: '.06em',
+                                }}>
+                                  {sport} · {fmt(amt)}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td style={{ padding: '12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--gold-l)', fontWeight: 700, fontSize: 14 }}>
+                            {fmt(row.total)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )
+              })()}
+            </div>
           </div>
         )}
 

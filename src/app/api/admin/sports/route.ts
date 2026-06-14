@@ -16,13 +16,34 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const admin = createAdminClient()
-  const { data, error } = await admin
-    .from('sports_events')
-    .select('*')
-    .order('created_at', { ascending: false })
+  const [eventsRes, betsRes] = await Promise.all([
+    admin.from('sports_events').select('*').order('created_at', { ascending: false }),
+    admin.from('sports_bets')
+      .select('user_id, event_id, chips_wagered, chips_won, won, settled, option_id')
+      .order('created_at', { ascending: false }),
+  ])
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ events: data || [] })
+  // Get player names for all bettors
+  const userIds = [...new Set((betsRes.data || []).map(b => b.user_id))]
+  let playerMap: Record<string, string> = {}
+  if (userIds.length > 0) {
+    const { data: profiles } = await admin.from('profiles').select('id, display_name').in('id', userIds)
+    for (const p of profiles || []) playerMap[p.id] = p.display_name
+  }
+
+  // Build event title map
+  const eventMap: Record<string, { title: string; sport: string }> = {}
+  for (const e of eventsRes.data || []) eventMap[e.id] = { title: e.title, sport: e.sport }
+
+  const bets = (betsRes.data || []).map(b => ({
+    ...b,
+    display_name: playerMap[b.user_id] || 'Unknown',
+    event_title: eventMap[b.event_id]?.title || 'Unknown Event',
+    sport: eventMap[b.event_id]?.sport || 'unknown',
+  }))
+
+  if (eventsRes.error) return NextResponse.json({ error: eventsRes.error.message }, { status: 500 })
+  return NextResponse.json({ events: eventsRes.data || [], bets })
 }
 
 export async function POST(request: Request) {
