@@ -316,6 +316,7 @@ export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<'players' | 'stats' | 'live' | 'settings' | 'sports'>('players')
   const [sportsEvents, setSportsEvents] = useState<AdminSportsEvent[]>([])
   const [sportsBets, setSportsBets] = useState<SportsBet[]>([])
+  const [sportsSubTab, setSportsSubTab] = useState<'events' | 'bettors'>('events')
   const [showAddEvent, setShowAddEvent] = useState(false)
   const [eventForm, setEventForm] = useState({ sport: 'nba', title: '', description: '', options: [{ id: 'a', label: '' }, { id: 'b', label: '' }], closes_at: '', event_date: '' })
   const [settlingId, setSettlingId] = useState<string | null>(null)
@@ -1020,9 +1021,20 @@ export default function AdminPage() {
         {activeTab === 'sports' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-              <h2 style={{ fontFamily: 'var(--fs-head)', fontWeight: 700, fontSize: 20, margin: 0 }}>
-                <span className="gold-text">Sports Events</span>
-              </h2>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {(['events', 'bettors'] as const).map(t => (
+                  <button key={t} onClick={() => setSportsSubTab(t)} style={{
+                    fontFamily: 'var(--fs-head)', fontWeight: 600, fontSize: 12,
+                    letterSpacing: '.1em', textTransform: 'uppercase',
+                    padding: '7px 16px', borderRadius: 999, border: 'none', cursor: 'pointer',
+                    background: sportsSubTab === t ? 'var(--gold-grad)' : 'rgba(217,182,90,.1)',
+                    color: sportsSubTab === t ? '#1a1408' : 'var(--cream-faint)',
+                    transition: 'all .15s',
+                  }}>
+                    {t === 'events' ? 'Events' : 'Bettors'}
+                  </button>
+                ))}
+              </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button className="btn btn-sm" onClick={handleSyncOdds} disabled={syncing}
                   style={{ opacity: syncing ? .6 : 1, background: 'linear-gradient(135deg,#137a4a,#0c5a37)', border: 'none' }}>
@@ -1032,6 +1044,7 @@ export default function AdminPage() {
               </div>
             </div>
 
+            {sportsSubTab === 'events' && <>
             {/* Add Event form */}
             {showAddEvent && (
               <div style={{ ...panelStyle, padding: 24 }}>
@@ -1165,6 +1178,9 @@ export default function AdminPage() {
               </div>
             )}
 
+            </>}
+
+            {sportsSubTab === 'bettors' && <>
             {/* Bettor breakdown */}
             <div style={panelStyle}>
               <h3 style={{ fontFamily: 'var(--fs-head)', fontWeight: 700, fontSize: 16, margin: '0 0 16px', letterSpacing: '.04em' }}>
@@ -1221,6 +1237,7 @@ export default function AdminPage() {
                 )
               })()}
             </div>
+            </>}
           </div>
         )}
 
