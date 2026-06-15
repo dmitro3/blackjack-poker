@@ -37,6 +37,9 @@ const GOLF_KEYS = [
   'golf_pga_tour_winner',
 ]
 
+// F1 — race winner outright
+const F1_KEY = 'motorsport_formula_one'
+
 function teamId(name: string) {
   return name.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 30)
 }
@@ -213,6 +216,50 @@ async function runSync() {
     } catch (e: unknown) {
       errors.push(`Golf (${golfKey}): ${e instanceof Error ? e.message : String(e)}`)
     }
+  }
+
+  // ── F1 — race winner outright ─────────────────────────────────────────────────
+  try {
+    const res = await fetch(
+      `${BASE}/sports/${F1_KEY}/odds?apiKey=${API_KEY}&regions=us&markets=outrights&bookmakers=draftkings`,
+      { cache: 'no-store' }
+    )
+    if (res.ok) {
+      const events: GolfEvent[] = await res.json()
+      for (const ev of Array.isArray(events) ? events : []) {
+        const start = new Date(ev.commence_time)
+        if (start <= now) continue
+
+        const oddsId = `odds:${ev.id}`
+        const { data: existing } = await admin.from('sports_events').select('id').eq('description', oddsId).maybeSingle()
+        if (existing) continue
+
+        const outcomes: { name: string; price: number }[] =
+          ev.bookmakers?.[0]?.markets?.[0]?.outcomes ?? []
+        if (outcomes.length < 2) continue
+
+        const sorted = [...outcomes].sort((a, b) => {
+          if (a.price < 0 && b.price >= 0) return -1
+          if (a.price >= 0 && b.price < 0) return 1
+          return a.price - b.price
+        })
+
+        const options = sorted.slice(0, 6).map(p => ({ id: teamId(p.name), label: p.name }))
+
+        const title = ev.sport_title
+          .replace(/\s*Winner$/i, '')
+          .replace(/^Formula One\s*/i, 'F1 ')
+          .trim() + ' – Pick the winner'
+
+        await admin.from('sports_events').insert({
+          sport: 'f1', title, description: oddsId, options,
+          closes_at: ev.commence_time, event_date: ev.commence_time, status: 'open',
+        })
+        created++
+      }
+    }
+  } catch (e: unknown) {
+    errors.push(`F1: ${e instanceof Error ? e.message : String(e)}`)
   }
 
   return { created, settled, errors, timestamp: new Date().toISOString() }

@@ -1054,7 +1054,7 @@ export default function AdminPage() {
                     <label style={{ fontSize: 11, color: 'var(--cream-faint)', fontFamily: 'var(--fs-head)', letterSpacing: '.15em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Sport</label>
                     <select value={eventForm.sport} onChange={e => setEventForm(f => ({ ...f, sport: e.target.value }))}
                       style={{ width: '100%', height: 40, padding: '0 12px', borderRadius: 8, background: 'rgba(0,0,0,.5)', border: '1px solid rgba(217,182,90,.25)', color: 'var(--cream)', fontSize: 14 }}>
-                      {['nba','nfl','soccer','mlb','pga','tennis','ufc','esports','nhl','other'].map(s => (
+                      {['nba','nfl','soccer','mlb','pga','f1','tennis','ufc','esports','nhl','other'].map(s => (
                         <option key={s} value={s}>{s.toUpperCase()}</option>
                       ))}
                     </select>
