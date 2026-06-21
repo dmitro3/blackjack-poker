@@ -54,6 +54,7 @@ function LobbyContent() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const [refillEnabled, setRefillEnabled] = useState(true)
+  const [refillAmount, setRefillAmount] = useState(100000)
   const [siteUrl, setSiteUrl] = useState('')
   const [copied, setCopied] = useState(false)
   const [toast, setToast] = useState<{msg:string,kind:string}|null>(null)
@@ -93,13 +94,15 @@ function LobbyContent() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
 
-      const [profileRes, settingsRes] = await Promise.all([
+      const [profileRes, enabledRes, amountRes] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', user.id).single(),
         supabase.from('admin_settings').select('value').eq('key', 'refill_enabled').single(),
+        supabase.from('admin_settings').select('value').eq('key', 'refill_amount').single(),
       ])
 
       if (profileRes.data) setProfile(profileRes.data)
-      if (settingsRes.data) setRefillEnabled(settingsRes.data.value === 'true')
+      if (enabledRes.data) setRefillEnabled(enabledRes.data.value === 'true')
+      if (amountRes.data) setRefillAmount(parseInt(amountRes.data.value, 10) || 100000)
       setLoading(false)
 
       // Show invite bonus toast
@@ -112,16 +115,16 @@ function LobbyContent() {
 
   async function handleRefill() {
     if (!profile) return
-    if (profile.chips >= 100000) { showToast('You\'re already flush!'); return }
+    if (profile.chips >= refillAmount) { showToast('You\'re already flush!'); return }
     const res = await fetch('/api/game/session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ game: 'refill', chips_wagered: 0, chips_won: 100000 - profile.chips }),
+      body: JSON.stringify({ game: 'refill', chips_wagered: 0, chips_won: refillAmount - profile.chips }),
     })
     if (res.ok) {
       const data = await res.json()
       setProfile(p => p ? { ...p, chips: data.chips } : p)
-      showToast('Topped up to 100,000', 'win')
+      showToast(`Topped up to ${fmt(refillAmount)}`, 'win')
     }
   }
 

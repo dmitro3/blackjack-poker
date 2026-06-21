@@ -326,6 +326,9 @@ export default function AdminPage() {
   const [sessionsByUser, setSessionsByUser] = useState<Record<string, PlayerGameStat[]>>({})
   const [allSessions, setAllSessions] = useState<Session[]>([])
   const [refillEnabled, setRefillEnabled] = useState(true)
+  const [refillAmount, setRefillAmount] = useState(100000)
+  const [refillAmountInput, setRefillAmountInput] = useState('100000')
+  const [savingRefillAmount, setSavingRefillAmount] = useState(false)
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState<{ msg: string; kind: string } | null>(null)
   const [grantTarget, setGrantTarget] = useState('')
@@ -367,6 +370,10 @@ export default function AdminPage() {
     const data = await res.json()
     setPlayers(data.players)
     setRefillEnabled(data.refillEnabled)
+    if (typeof data.refillAmount === 'number') {
+      setRefillAmount(data.refillAmount)
+      setRefillAmountInput(String(data.refillAmount))
+    }
 
     // Build aggregate game stats
     const map: Record<string, GameStat> = {}
@@ -581,6 +588,25 @@ export default function AdminPage() {
       showToast(`Granted ${fmt(amount)} chips`, 'win')
       setGrantAmount('')
     }
+  }
+
+  async function handleSaveRefillAmount() {
+    const amount = parseInt(refillAmountInput, 10)
+    if (isNaN(amount) || amount < 1000) { showToast('Enter a valid amount (min 1,000)', ''); return }
+    setSavingRefillAmount(true)
+    const res = await fetch('/api/admin/set-refill-amount', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount }),
+    })
+    if (res.ok) {
+      setRefillAmount(amount)
+      showToast(`Refill set to ${fmt(amount)} chips`, 'win')
+    } else {
+      const d = await res.json()
+      showToast(d.error || 'Failed', 'lose')
+    }
+    setSavingRefillAmount(false)
   }
 
   async function handleToggleRefill() {
@@ -1356,6 +1382,38 @@ export default function AdminPage() {
                   <span style={{ color: refillEnabled ? '#5fd99a' : '#e7708a' }}>
                     {refillEnabled ? 'Enabled — players can top up' : 'Disabled — top-up button hidden'}
                   </span>
+                </div>
+              </div>
+
+              <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid rgba(217,182,90,.12)' }}>
+                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Refill Amount</div>
+                <div style={{ color: 'var(--cream-faint)', fontSize: 13, lineHeight: 1.5, marginBottom: 12 }}>
+                  How many chips players are topped up to when they hit Refill.
+                </div>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <input
+                    type="number"
+                    value={refillAmountInput}
+                    onChange={e => setRefillAmountInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleSaveRefillAmount() }}
+                    style={{
+                      flex: 1, padding: '10px 14px', borderRadius: 8,
+                      background: 'rgba(255,255,255,.05)', border: '1px solid rgba(217,182,90,.25)',
+                      color: 'var(--gold-l)', fontSize: 15, fontFamily: 'var(--fs-body)',
+                      outline: 'none', fontVariantNumeric: 'tabular-nums',
+                    }}
+                  />
+                  <button
+                    className="btn btn-sm"
+                    onClick={handleSaveRefillAmount}
+                    disabled={savingRefillAmount}
+                    style={{ flexShrink: 0 }}
+                  >
+                    {savingRefillAmount ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
+                <div style={{ marginTop: 8, fontSize: 12, color: 'var(--cream-faint)' }}>
+                  Currently: <strong style={{ color: 'var(--cream)' }}>{fmt(refillAmount)} chips</strong>
                 </div>
               </div>
 
