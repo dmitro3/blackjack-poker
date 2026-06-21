@@ -154,10 +154,14 @@ async function runSync() {
           for (const bet of bets ?? []) {
             const won = bet.option_id === winnerOptionId
             const chips_won = won ? bet.chips_wagered * 2 : 0
-            if (won) await adjustBalance(bet.user_id, chips_won)
-            await logGameSession(bet.user_id, 'sports', bet.chips_wagered, chips_won)
-            await admin.from('sports_bets').update({ settled: true, won, chips_won }).eq('id', bet.id)
-            settled++
+            try {
+              if (won) await adjustBalance(bet.user_id, chips_won)
+              await logGameSession(bet.user_id, 'sports', bet.chips_wagered, chips_won)
+              await admin.from('sports_bets').update({ settled: true, won, chips_won }).eq('id', bet.id)
+              settled++
+            } catch (err) {
+              errors.push(`bet ${bet.id}: ${err instanceof Error ? err.message : String(err)}`)
+            }
           }
           await admin.from('sports_events').update({ status: 'settled', result_option_id: winnerOptionId }).eq('id', ourEvent.id)
         }

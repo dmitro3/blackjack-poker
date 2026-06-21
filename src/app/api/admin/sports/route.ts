@@ -86,15 +86,19 @@ export async function PATCH(request: Request) {
   }
 
   if (action === 'cancel') {
-    const { data: bets } = await admin.from('sports_bets').select('user_id, chips_wagered').eq('event_id', event_id).eq('settled', false)
-    if (bets) {
-      for (const bet of bets) {
+    const { data: bets } = await admin.from('sports_bets').select('id, user_id, chips_wagered').eq('event_id', event_id).eq('settled', false)
+    let refunded = 0
+    for (const bet of bets ?? []) {
+      try {
         await adjustBalance(bet.user_id, bet.chips_wagered)
+        await admin.from('sports_bets').update({ settled: true, won: false, chips_won: 0 }).eq('id', bet.id)
+        refunded++
+      } catch (err) {
+        console.error('[cancel] refund failed for bet', bet.id, err)
       }
-      await admin.from('sports_bets').update({ settled: true, won: false }).eq('event_id', event_id).eq('settled', false)
     }
     await admin.from('sports_events').update({ status: 'cancelled' }).eq('id', event_id)
-    return NextResponse.json({ ok: true, refunded: bets?.length || 0 })
+    return NextResponse.json({ ok: true, refunded })
   }
 
   if (action === 'settle') {
@@ -106,18 +110,25 @@ export async function PATCH(request: Request) {
       .eq('event_id', event_id)
       .eq('settled', false)
 
-    if (bets) {
-      for (const bet of bets) {
-        const won = bet.option_id === result_option_id
-        const chips_won = won ? bet.chips_wagered * 2 : 0
+    let settledCount = 0
+    const failures: string[] = []
+
+    for (const bet of bets ?? []) {
+      const won = bet.option_id === result_option_id
+      const chips_won = won ? bet.chips_wagered * 2 : 0
+      try {
         if (won) await adjustBalance(bet.user_id, chips_won)
         await logGameSession(bet.user_id, 'sports', bet.chips_wagered, chips_won)
         await admin.from('sports_bets').update({ settled: true, won, chips_won }).eq('id', bet.id)
+        settledCount++
+      } catch (err) {
+        console.error('[settle] failed for bet', bet.id, err)
+        failures.push(bet.id)
       }
     }
 
     await admin.from('sports_events').update({ status: 'settled', result_option_id }).eq('id', event_id)
-    return NextResponse.json({ ok: true, settled: bets?.length || 0 })
+    return NextResponse.json({ ok: true, settled: settledCount, failed: failures.length })
   }
 
   if (action === 'reopen') {
