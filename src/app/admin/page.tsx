@@ -30,6 +30,14 @@ interface Profile {
   last_login: string
   created_at: string
   pin?: string
+  beta_access?: boolean
+}
+
+interface FeatureFlag {
+  key: string
+  display_name: string
+  status: 'beta' | 'public'
+  created_at: string
 }
 
 interface Session {
@@ -333,7 +341,7 @@ export default function AdminPage() {
   const [toast, setToast] = useState<{ msg: string; kind: string } | null>(null)
   const [grantTarget, setGrantTarget] = useState('')
   const [grantAmount, setGrantAmount] = useState('')
-  const [activeTab, setActiveTab] = useState<'players' | 'stats' | 'live' | 'settings' | 'sports'>('players')
+  const [activeTab, setActiveTab] = useState<'players' | 'stats' | 'live' | 'settings' | 'sports' | 'beta'>('players')
   const [sportsEvents, setSportsEvents] = useState<AdminSportsEvent[]>([])
   const [sportsBets, setSportsBets] = useState<SportsBet[]>([])
   const [sportsSubTab, setSportsSubTab] = useState<'events' | 'bettors'>('events')
@@ -353,6 +361,10 @@ export default function AdminPage() {
   const [newGuestPin, setNewGuestPin] = useState('')
   const [creatingGuest, setCreatingGuest] = useState(false)
   const [generatingPins, setGeneratingPins] = useState(false)
+  const [featureFlags, setFeatureFlags] = useState<FeatureFlag[]>([])
+  const [newFlagKey, setNewFlagKey] = useState('')
+  const [newFlagName, setNewFlagName] = useState('')
+  const [addingFlag, setAddingFlag] = useState(false)
   const router = useRouter()
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -430,6 +442,7 @@ export default function AdminPage() {
   useEffect(() => {
     load()
     fetch('/api/admin/guests').then(r => r.ok ? r.json() : null).then(d => { if (d) setGuests(d.guests || []) })
+    fetch('/api/admin/feature-flags').then(r => r.ok ? r.json() : null).then(d => { if (d) setFeatureFlags(d.flags || []) })
     intervalRef.current = setInterval(() => load(true), 30000)
     countdownRef.current = setInterval(() => setCountdown(c => c <= 1 ? 30 : c - 1), 1000)
     return () => {
@@ -609,6 +622,64 @@ export default function AdminPage() {
     setSavingRefillAmount(false)
   }
 
+  async function handleToggleBetaAccess(userId: string, current: boolean) {
+    const res = await fetch('/api/admin/beta-access', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, beta_access: !current }),
+    })
+    if (res.ok) {
+      setPlayers(ps => ps.map(p => p.id === userId ? { ...p, beta_access: !current } : p))
+      showToast(!current ? 'Beta access granted' : 'Beta access revoked', !current ? 'win' : '')
+    } else {
+      showToast('Failed', 'lose')
+    }
+  }
+
+  async function handleToggleFlag(key: string, current: 'beta' | 'public') {
+    const next = current === 'beta' ? 'public' : 'beta'
+    const res = await fetch('/api/admin/feature-flags', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, status: next }),
+    })
+    if (res.ok) {
+      setFeatureFlags(fs => fs.map(f => f.key === key ? { ...f, status: next } : f))
+      showToast(`${key} → ${next}`, 'win')
+    } else {
+      showToast('Failed', 'lose')
+    }
+  }
+
+  async function handleAddFlag() {
+    if (!newFlagKey.trim() || !newFlagName.trim()) { showToast('Key and name required', ''); return }
+    setAddingFlag(true)
+    const res = await fetch('/api/admin/feature-flags', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: newFlagKey.trim(), display_name: newFlagName.trim() }),
+    })
+    if (res.ok) {
+      const d = await res.json()
+      setFeatureFlags(fs => [...fs, d.flag])
+      setNewFlagKey('')
+      setNewFlagName('')
+      showToast('Flag created', 'win')
+    } else {
+      showToast('Failed', 'lose')
+    }
+    setAddingFlag(false)
+  }
+
+  async function handleDeleteFlag(key: string) {
+    if (!confirm(`Delete feature flag "${key}"?`)) return
+    const res = await fetch(`/api/admin/feature-flags?key=${encodeURIComponent(key)}`, { method: 'DELETE' })
+    if (res.ok) {
+      setFeatureFlags(fs => fs.filter(f => f.key !== key))
+      showToast('Flag deleted', '')
+    }
+  }
+
   async function handleToggleRefill() {
     const newVal = !refillEnabled
     const res = await fetch('/api/admin/toggle-refill', {
@@ -690,7 +761,7 @@ export default function AdminPage() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          {(['players', 'stats', 'live', 'sports', 'settings'] as const).map(tab => (
+          {(['players', 'stats', 'live', 'sports', 'settings', 'beta'] as const).map(tab => (
             <button key={tab} style={tabStyle(activeTab === tab)} onClick={() => setActiveTab(tab)}>
               {tab === 'players' ? 'Players'
                 : tab === 'stats' ? 'House Stats'
@@ -702,6 +773,7 @@ export default function AdminPage() {
                     Games
                   </span>
                 : tab === 'sports' ? '🏆 Sports'
+                : tab === 'beta' ? '⚗ Beta'
                 : 'Settings'}
             </button>
           ))}
@@ -1503,6 +1575,128 @@ export default function AdminPage() {
 
           </div>
         )}
+
+        {/* Beta tab */}
+        {activeTab === 'beta' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+            {/* Feature flags */}
+            <div style={panelStyle}>
+              <h2 style={{ fontFamily: 'var(--fs-head)', fontWeight: 700, fontSize: 20, margin: '0 0 6px' }}>
+                <span className="gold-text">Feature Flags</span>
+              </h2>
+              <p style={{ color: 'var(--cream-faint)', fontSize: 13, margin: '0 0 20px', lineHeight: 1.6 }}>
+                Toggle flags between <strong style={{ color: '#c4b5fd' }}>Beta</strong> (only beta-access users see) and <strong style={{ color: '#5fd99a' }}>Public</strong> (everyone sees).
+              </p>
+
+              {/* Add new flag */}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+                <input
+                  placeholder="flag-key"
+                  value={newFlagKey}
+                  onChange={e => setNewFlagKey(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
+                  style={{ flex: '0 0 160px', padding: '9px 12px', borderRadius: 8, background: 'rgba(255,255,255,.05)', border: '1px solid rgba(217,182,90,.25)', color: 'var(--cream)', fontSize: 13, fontFamily: 'monospace', outline: 'none' }}
+                />
+                <input
+                  placeholder="Display name"
+                  value={newFlagName}
+                  onChange={e => setNewFlagName(e.target.value)}
+                  style={{ flex: 1, minWidth: 140, padding: '9px 12px', borderRadius: 8, background: 'rgba(255,255,255,.05)', border: '1px solid rgba(217,182,90,.25)', color: 'var(--cream)', fontSize: 13, outline: 'none' }}
+                />
+                <button className="btn btn-sm" onClick={handleAddFlag} disabled={addingFlag || !newFlagKey.trim() || !newFlagName.trim()}>
+                  {addingFlag ? 'Adding…' : '+ Add Flag'}
+                </button>
+              </div>
+
+              {featureFlags.length === 0 ? (
+                <div style={{ color: 'var(--cream-faint)', fontSize: 13, padding: '16px 0', fontFamily: 'var(--fs-head)', letterSpacing: '.06em' }}>No flags yet — add one above.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {featureFlags.map(f => (
+                    <div key={f.key} style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '12px 16px', borderRadius: 10,
+                      background: 'rgba(0,0,0,.35)', border: '1px solid rgba(217,182,90,.12)',
+                      gap: 12,
+                    }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--cream)', marginBottom: 2 }}>{f.display_name}</div>
+                        <code style={{ fontSize: 11, color: 'var(--cream-faint)', fontFamily: 'monospace' }}>{f.key}</code>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                        <span style={{
+                          fontSize: 11, padding: '3px 10px', borderRadius: 999,
+                          fontFamily: 'var(--fs-head)', letterSpacing: '.08em',
+                          background: f.status === 'public' ? 'rgba(95,217,154,.1)' : 'rgba(167,139,250,.1)',
+                          border: f.status === 'public' ? '1px solid rgba(95,217,154,.3)' : '1px solid rgba(167,139,250,.3)',
+                          color: f.status === 'public' ? '#5fd99a' : '#c4b5fd',
+                        }}>
+                          {f.status === 'public' ? 'Public' : 'Beta'}
+                        </span>
+                        <button
+                          className="btn btn-sm btn-ghost"
+                          style={{ fontSize: 11 }}
+                          onClick={() => handleToggleFlag(f.key, f.status)}
+                        >
+                          {f.status === 'beta' ? 'Release' : '→ Beta'}
+                        </button>
+                        <button
+                          onClick={() => handleDeleteFlag(f.key)}
+                          style={{ background: 'none', border: 'none', color: 'rgba(231,112,138,.5)', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '2px 4px' }}
+                        >×</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Beta access per user */}
+            <div style={panelStyle}>
+              <h2 style={{ fontFamily: 'var(--fs-head)', fontWeight: 700, fontSize: 20, margin: '0 0 6px' }}>
+                <span className="gold-text">Beta Access</span>
+              </h2>
+              <p style={{ color: 'var(--cream-faint)', fontSize: 13, margin: '0 0 20px', lineHeight: 1.6 }}>
+                Grant or revoke early access to beta features per player. Admins always have access.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {players.filter(p => p.email !== DIRECTOR_EMAIL).map(p => (
+                  <div key={p.id} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '10px 16px', borderRadius: 10,
+                    background: p.beta_access ? 'rgba(167,139,250,.06)' : 'rgba(0,0,0,.3)',
+                    border: p.beta_access ? '1px solid rgba(167,139,250,.25)' : '1px solid rgba(217,182,90,.1)',
+                    gap: 12,
+                  }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--cream)' }}>{p.display_name || 'Unknown'}</div>
+                      <div style={{ fontSize: 12, color: 'var(--cream-faint)', marginTop: 1 }}>{p.email}</div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                      {p.is_admin && (
+                        <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 999, background: 'rgba(217,182,90,.1)', border: '1px solid rgba(217,182,90,.2)', color: 'var(--gold-l)', fontFamily: 'var(--fs-head)', letterSpacing: '.06em' }}>Admin</span>
+                      )}
+                      {p.beta_access && !p.is_admin && (
+                        <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 999, background: 'rgba(167,139,250,.1)', border: '1px solid rgba(167,139,250,.3)', color: '#c4b5fd', fontFamily: 'var(--fs-head)', letterSpacing: '.06em' }}>Beta</span>
+                      )}
+                      {!p.is_admin && (
+                        <button
+                          className={`btn btn-sm ${p.beta_access ? 'btn-ghost' : ''}`}
+                          style={{ fontSize: 11 }}
+                          onClick={() => handleToggleBetaAccess(p.id, !!p.beta_access)}
+                        >
+                          {p.beta_access ? 'Revoke' : 'Grant Beta'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+          </div>
+        )}
+
       </div>
     </div>
   )
