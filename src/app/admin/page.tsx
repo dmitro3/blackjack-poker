@@ -644,7 +644,7 @@ export default function AdminPage() {
           rooms={rooms}
           onClose={() => setSelectedPlayer(null)}
           onBan={handleBan}
-          pin={pinByUserId[selectedPlayer.id]}
+          pin={pinByUserId[selectedPlayer.id] || selectedPlayer.pin}
         />
       )}
 
@@ -756,10 +756,10 @@ export default function AdminPage() {
                               {p.display_name || 'Unknown'}
                               {p.email === DIRECTOR_EMAIL && <span style={{ fontSize: 9, letterSpacing: '.14em', color: 'var(--gold)', fontFamily: 'var(--fs-head)', textTransform: 'uppercase', fontWeight: 700, padding: '1px 6px', border: '1px solid rgba(217,182,90,.4)', borderRadius: 999 }}>Director</span>}
                             </div>
-                            {pinByUserId[p.id] ? (
+                            {(pinByUserId[p.id] || p.pin) ? (
                               <div style={{ fontSize: 12, marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
                                 <span style={{ color: 'var(--cream-faint)' }}>PIN:</span>
-                                <code style={{ fontFamily: 'monospace', letterSpacing: '0.2em', color: 'var(--gold-l)', fontWeight: 700, fontSize: 13 }}>{pinByUserId[p.id]}</code>
+                                <code style={{ fontFamily: 'monospace', letterSpacing: '0.2em', color: 'var(--gold-l)', fontWeight: 700, fontSize: 13 }}>{pinByUserId[p.id] || p.pin}</code>
                               </div>
                             ) : (
                               <div style={{ fontSize: 12, color: 'var(--cream-faint)', marginTop: 2 }}>{p.email}</div>
