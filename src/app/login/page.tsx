@@ -67,9 +67,10 @@ function LoginContent() {
         body: JSON.stringify({ pin, firstName, lastName }),
       })
       let data: { email?: string; password?: string; error?: string } = {}
-      try { data = await res.json() } catch { /* non-JSON response */ }
+      const rawText = await res.text()
+      try { data = JSON.parse(rawText) } catch { /* non-JSON response */ }
       if (!res.ok) {
-        setError(data.error || 'Invalid PIN or name.')
+        setError(data.error || `Error ${res.status}: please try again.`)
         setLoading(false)
         return
       }

@@ -23,6 +23,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Name required' }, { status: 400 })
     }
 
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      console.error('[pin-login] SUPABASE_SERVICE_ROLE_KEY is not set')
+      return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 })
+    }
+
     const admin = createAdminClient()
     const id = crypto.randomUUID()
     const password = crypto.randomUUID()
