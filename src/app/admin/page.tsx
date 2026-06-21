@@ -1312,47 +1312,51 @@ export default function AdminPage() {
 
         {/* Settings tab */}
         {activeTab === 'settings' && (
-          <div style={{ ...panelStyle, maxWidth: 540 }}>
-            <h2 style={{ fontFamily: 'var(--fs-head)', fontWeight: 700, fontSize: 20, margin: '0 0 20px' }}>
-              <span className="gold-text">Site Settings</span>
-            </h2>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
 
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 0', borderBottom: '1px solid rgba(217,182,90,.12)' }}>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>Refill Button</div>
-                <div style={{ color: 'var(--cream-faint)', fontSize: 13, lineHeight: 1.5 }}>
-                  Controls whether players can top up to 100,000 chips from the lobby.
+            {/* Refill button panel */}
+            <div style={panelStyle}>
+              <h2 style={{ fontFamily: 'var(--fs-head)', fontWeight: 700, fontSize: 20, margin: '0 0 20px' }}>
+                <span className="gold-text">Site Settings</span>
+              </h2>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 0', borderBottom: '1px solid rgba(217,182,90,.12)' }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>Refill Button</div>
+                  <div style={{ color: 'var(--cream-faint)', fontSize: 13, lineHeight: 1.5 }}>
+                    Controls whether players can top up to 100,000 chips from the lobby.
+                  </div>
+                </div>
+                <button
+                  onClick={handleToggleRefill}
+                  style={{
+                    width: 56, height: 30, borderRadius: 999, border: 'none', cursor: 'pointer',
+                    background: refillEnabled ? 'var(--gold-grad)' : 'rgba(217,182,90,.15)',
+                    position: 'relative', transition: '.3s', flexShrink: 0, marginLeft: 20,
+                  }}
+                >
+                  <div style={{
+                    position: 'absolute', top: 3, left: refillEnabled ? 28 : 3,
+                    width: 24, height: 24, borderRadius: '50%',
+                    background: refillEnabled ? '#2a1f08' : 'rgba(217,182,90,.4)',
+                    transition: '.3s',
+                  }} />
+                </button>
+              </div>
+              <div style={{ marginTop: 20, padding: '16px', borderRadius: 10, background: 'rgba(0,0,0,.3)', border: '1px solid rgba(217,182,90,.15)' }}>
+                <div style={{ fontSize: 12, color: 'var(--cream-faint)', lineHeight: 1.6 }}>
+                  <strong style={{ color: 'var(--cream-dim)' }}>Refill status:</strong>{' '}
+                  <span style={{ color: refillEnabled ? '#5fd99a' : '#e7708a' }}>
+                    {refillEnabled ? 'Enabled — players can top up' : 'Disabled — top-up button hidden'}
+                  </span>
                 </div>
               </div>
-              <button
-                onClick={handleToggleRefill}
-                style={{
-                  width: 56, height: 30, borderRadius: 999, border: 'none', cursor: 'pointer',
-                  background: refillEnabled ? 'var(--gold-grad)' : 'rgba(217,182,90,.15)',
-                  position: 'relative', transition: '.3s', flexShrink: 0, marginLeft: 20,
-                }}
-              >
-                <div style={{
-                  position: 'absolute', top: 3, left: refillEnabled ? 28 : 3,
-                  width: 24, height: 24, borderRadius: '50%',
-                  background: refillEnabled ? '#2a1f08' : 'rgba(217,182,90,.4)',
-                  transition: '.3s',
-                }} />
-              </button>
             </div>
 
-            <div style={{ marginTop: 20, padding: '16px', borderRadius: 10, background: 'rgba(0,0,0,.3)', border: '1px solid rgba(217,182,90,.15)' }}>
-              <div style={{ fontSize: 12, color: 'var(--cream-faint)', lineHeight: 1.6 }}>
-                <strong style={{ color: 'var(--cream-dim)' }}>Refill status:</strong>{' '}
-                <span style={{ color: refillEnabled ? '#5fd99a' : '#e7708a' }}>
-                  {refillEnabled ? 'Enabled — players can top up' : 'Disabled — top-up button hidden'}
-                </span>
-              </div>
-            </div>
-
-            {/* Guest account creation */}
-            <div style={{ marginTop: 32, paddingTop: 28, borderTop: '1px solid rgba(217,182,90,.12)' }}>
-              <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>Create Guest Account</div>
+            {/* Guest accounts panel */}
+            <div style={panelStyle}>
+              <h2 style={{ fontFamily: 'var(--fs-head)', fontWeight: 700, fontSize: 20, margin: '0 0 20px' }}>
+                <span className="gold-text">Guest Accounts</span>
+              </h2>
               <div style={{ color: 'var(--cream-faint)', fontSize: 13, lineHeight: 1.5, marginBottom: 16 }}>
                 Guest accounts sign in with a PIN instead of Google. The player&apos;s name and PIN are visible in the player list.
               </div>
@@ -1415,6 +1419,7 @@ export default function AdminPage() {
                 </div>
               )}
             </div>
+
           </div>
         )}
       </div>
