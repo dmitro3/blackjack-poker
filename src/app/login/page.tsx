@@ -66,7 +66,8 @@ function LoginContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pin, firstName, lastName }),
       })
-      const data = await res.json()
+      let data: { email?: string; password?: string; error?: string } = {}
+      try { data = await res.json() } catch { /* non-JSON response */ }
       if (!res.ok) {
         setError(data.error || 'Invalid PIN or name.')
         setLoading(false)
@@ -74,8 +75,8 @@ function LoginContent() {
       }
       const supabase = createClient()
       const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: data.email,
-        password: data.password,
+        email: data.email!,
+        password: data.password!,
       })
       if (signInError) {
         setError('Sign-in failed. Please try again.')
