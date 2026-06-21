@@ -2,15 +2,21 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { Suspense } from 'react'
 
 function LoginContent() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [pinMode, setPinMode] = useState(false)
+  const [pin, setPin] = useState('')
+  const [pinValid, setPinValid] = useState(false)
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
   const searchParams = useSearchParams()
   const inviteCode = searchParams.get('invite')
   const errorParam = searchParams.get('error')
+  const router = useRouter()
 
   useEffect(() => {
     if (errorParam) setError('Sign-in failed. Please try again.')
@@ -33,6 +39,67 @@ function LoginContent() {
       setError(error.message)
       setLoading(false)
     }
+  }
+
+  function handlePinChange(val: string) {
+    const digits = val.replace(/\D/g, '').slice(0, 4)
+    setPin(digits)
+    setError('')
+    if (digits.length === 4) {
+      // Validate PIN client-safely: just reveal the name fields; server validates actual PIN
+      setPinValid(true)
+    } else {
+      setPinValid(false)
+    }
+  }
+
+  async function signInWithPin() {
+    if (!firstName.trim() || !lastName.trim()) {
+      setError('Please enter your first and last name.')
+      return
+    }
+    setLoading(true)
+    setError('')
+    try {
+      const res = await fetch('/api/auth/pin-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin, firstName, lastName }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.error || 'Invalid PIN or name.')
+        setLoading(false)
+        return
+      }
+      const supabase = createClient()
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: data.email,
+        password: data.password,
+      })
+      if (signInError) {
+        setError('Sign-in failed. Please try again.')
+        setLoading(false)
+        return
+      }
+      router.push('/')
+    } catch {
+      setError('Something went wrong. Please try again.')
+      setLoading(false)
+    }
+  }
+
+  const inputStyle = {
+    width: '100%',
+    padding: '13px 16px',
+    borderRadius: 10,
+    background: 'rgba(255,255,255,.05)',
+    border: '1px solid rgba(217,182,90,.25)',
+    color: 'var(--cream)',
+    fontSize: 15,
+    fontFamily: 'var(--fs-body)',
+    outline: 'none',
+    boxSizing: 'border-box' as const,
   }
 
   return (
@@ -122,7 +189,9 @@ function LoginContent() {
           lineHeight:1.6,
           marginBottom:32,
         }}>
-          Members-only table. Sign in with Google to access the card room.
+          {pinMode
+            ? 'Enter your access PIN to continue.'
+            : 'Members-only table. Sign in with Google to access the card room.'}
         </p>
 
         {error && (
@@ -139,27 +208,119 @@ function LoginContent() {
           </div>
         )}
 
-        <button
-          className="btn"
-          onClick={signInWithGoogle}
-          disabled={loading}
-          style={{width:'100%',fontSize:15,padding:'16px 30px',display:'flex',alignItems:'center',justifyContent:'center',gap:12}}
-        >
-          {loading ? (
-            <span style={{
-              width:16,height:16,border:'2px solid rgba(42,31,8,.4)',borderTopColor:'#2a1f08',
-              borderRadius:'50%',animation:'spin360 .8s linear infinite',display:'inline-block'
-            }} />
-          ) : (
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-              <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615Z" fill="#2a1f08"/>
-              <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18Z" fill="#2a1f08"/>
-              <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332Z" fill="#2a1f08"/>
-              <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58Z" fill="#2a1f08"/>
-            </svg>
-          )}
-          {loading ? 'Signing in…' : 'Sign in with Google'}
-        </button>
+        {!pinMode ? (
+          <>
+            <button
+              className="btn"
+              onClick={signInWithGoogle}
+              disabled={loading}
+              style={{width:'100%',fontSize:15,padding:'16px 30px',display:'flex',alignItems:'center',justifyContent:'center',gap:12}}
+            >
+              {loading ? (
+                <span style={{
+                  width:16,height:16,border:'2px solid rgba(42,31,8,.4)',borderTopColor:'#2a1f08',
+                  borderRadius:'50%',animation:'spin360 .8s linear infinite',display:'inline-block'
+                }} />
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                  <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615Z" fill="#2a1f08"/>
+                  <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18Z" fill="#2a1f08"/>
+                  <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332Z" fill="#2a1f08"/>
+                  <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58Z" fill="#2a1f08"/>
+                </svg>
+              )}
+              {loading ? 'Signing in…' : 'Sign in with Google'}
+            </button>
+
+            <button
+              onClick={() => { setPinMode(true); setError('') }}
+              style={{
+                marginTop:16,
+                background:'none',
+                border:'none',
+                color:'var(--cream-faint)',
+                fontSize:12,
+                letterSpacing:'.06em',
+                cursor:'pointer',
+                fontFamily:'var(--fs-head)',
+                textDecoration:'underline',
+                textUnderlineOffset:3,
+                padding:0,
+              }}
+            >
+              Have an access PIN?
+            </button>
+          </>
+        ) : (
+          <div style={{display:'flex',flexDirection:'column',gap:14}}>
+            <div>
+              <input
+                type="password"
+                inputMode="numeric"
+                placeholder="Enter 4-digit PIN"
+                value={pin}
+                onChange={e => handlePinChange(e.target.value)}
+                maxLength={4}
+                style={{...inputStyle, textAlign:'center', letterSpacing:'0.5em', fontSize:22}}
+                autoFocus
+              />
+            </div>
+
+            {pinValid && (
+              <>
+                <input
+                  type="text"
+                  placeholder="First name"
+                  value={firstName}
+                  onChange={e => setFirstName(e.target.value)}
+                  style={inputStyle}
+                  autoComplete="given-name"
+                />
+                <input
+                  type="text"
+                  placeholder="Last name"
+                  value={lastName}
+                  onChange={e => setLastName(e.target.value)}
+                  style={inputStyle}
+                  autoComplete="family-name"
+                  onKeyDown={e => { if (e.key === 'Enter') signInWithPin() }}
+                />
+              </>
+            )}
+
+            <button
+              className="btn"
+              onClick={signInWithPin}
+              disabled={loading || !pinValid || !firstName.trim() || !lastName.trim()}
+              style={{width:'100%',fontSize:15,padding:'16px 30px',display:'flex',alignItems:'center',justifyContent:'center',gap:12}}
+            >
+              {loading ? (
+                <span style={{
+                  width:16,height:16,border:'2px solid rgba(42,31,8,.4)',borderTopColor:'#2a1f08',
+                  borderRadius:'50%',animation:'spin360 .8s linear infinite',display:'inline-block'
+                }} />
+              ) : 'Enter the Room'}
+            </button>
+
+            <button
+              onClick={() => { setPinMode(false); setPin(''); setPinValid(false); setFirstName(''); setLastName(''); setError('') }}
+              style={{
+                background:'none',
+                border:'none',
+                color:'var(--cream-faint)',
+                fontSize:12,
+                letterSpacing:'.06em',
+                cursor:'pointer',
+                fontFamily:'var(--fs-head)',
+                textDecoration:'underline',
+                textUnderlineOffset:3,
+                padding:0,
+              }}
+            >
+              ← Back to Google sign-in
+            </button>
+          </div>
+        )}
 
         <p style={{
           marginTop:24,
