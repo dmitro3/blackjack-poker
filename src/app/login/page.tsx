@@ -10,9 +10,6 @@ function LoginContent() {
   const [error, setError] = useState('')
   const [pinMode, setPinMode] = useState(false)
   const [pin, setPin] = useState('')
-  const [pinValid, setPinValid] = useState(false)
-  const [firstName, setFirstName] = useState('')
-  const [lastName, setLastName] = useState('')
   const searchParams = useSearchParams()
   const inviteCode = searchParams.get('invite')
   const errorParam = searchParams.get('error')
@@ -41,67 +38,43 @@ function LoginContent() {
     }
   }
 
-  function handlePinChange(val: string) {
-    const digits = val.replace(/\D/g, '').slice(0, 4)
-    setPin(digits)
-    setError('')
-    if (digits.length === 4) {
-      // Validate PIN client-safely: just reveal the name fields; server validates actual PIN
-      setPinValid(true)
-    } else {
-      setPinValid(false)
-    }
-  }
-
   async function signInWithPin() {
-    if (!firstName.trim() || !lastName.trim()) {
-      setError('Please enter your first and last name.')
-      return
-    }
+    if (pin.length < 1) return
     setLoading(true)
     setError('')
     try {
       const res = await fetch('/api/auth/pin-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin, firstName, lastName }),
+        body: JSON.stringify({ pin }),
       })
-      let data: { email?: string; password?: string; error?: string } = {}
+      let data: { access_token?: string; refresh_token?: string; error?: string } = {}
       const rawText = await res.text()
-      try { data = JSON.parse(rawText) } catch { /* non-JSON response */ }
+      try { data = JSON.parse(rawText) } catch { /* non-JSON */ }
+
       if (!res.ok) {
-        setError(data.error || `Error ${res.status}: please try again.`)
+        setError(data.error || `Error ${res.status}`)
         setLoading(false)
         return
       }
+
       const supabase = createClient()
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: data.email!,
-        password: data.password!,
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token: data.access_token!,
+        refresh_token: data.refresh_token!,
       })
-      if (signInError) {
+
+      if (sessionError) {
         setError('Sign-in failed. Please try again.')
         setLoading(false)
         return
       }
+
       router.push('/')
     } catch {
       setError('Something went wrong. Please try again.')
       setLoading(false)
     }
-  }
-
-  const inputStyle = {
-    width: '100%',
-    padding: '13px 16px',
-    borderRadius: 10,
-    background: 'rgba(255,255,255,.05)',
-    border: '1px solid rgba(217,182,90,.25)',
-    color: 'var(--cream)',
-    fontSize: 15,
-    fontFamily: 'var(--fs-body)',
-    outline: 'none',
-    boxSizing: 'border-box' as const,
   }
 
   return (
@@ -160,7 +133,7 @@ function LoginContent() {
 
         <hr className="hr-gold" style={{marginBottom:32}} />
 
-        {inviteCode && (
+        {inviteCode && !pinMode && (
           <div style={{
             padding:'12px 18px',
             borderRadius:10,
@@ -192,7 +165,7 @@ function LoginContent() {
           marginBottom:32,
         }}>
           {pinMode
-            ? 'Enter your access PIN to continue.'
+            ? 'Enter your access PIN to join the table.'
             : 'Members-only table. Sign in with Google to access the card room.'}
         </p>
 
@@ -255,45 +228,34 @@ function LoginContent() {
           </>
         ) : (
           <div style={{display:'flex',flexDirection:'column',gap:14}}>
-            <div>
-              <input
-                type="password"
-                inputMode="numeric"
-                placeholder="Enter 4-digit PIN"
-                value={pin}
-                onChange={e => handlePinChange(e.target.value)}
-                maxLength={4}
-                style={{...inputStyle, textAlign:'center', letterSpacing:'0.5em', fontSize:22}}
-                autoFocus
-              />
-            </div>
-
-            {pinValid && (
-              <>
-                <input
-                  type="text"
-                  placeholder="First name"
-                  value={firstName}
-                  onChange={e => setFirstName(e.target.value)}
-                  style={inputStyle}
-                  autoComplete="given-name"
-                />
-                <input
-                  type="text"
-                  placeholder="Last name"
-                  value={lastName}
-                  onChange={e => setLastName(e.target.value)}
-                  style={inputStyle}
-                  autoComplete="family-name"
-                  onKeyDown={e => { if (e.key === 'Enter') signInWithPin() }}
-                />
-              </>
-            )}
+            <input
+              type="password"
+              inputMode="numeric"
+              placeholder="Enter PIN"
+              value={pin}
+              onChange={e => { setPin(e.target.value); setError('') }}
+              style={{
+                width:'100%',
+                padding:'16px',
+                borderRadius:10,
+                background:'rgba(255,255,255,.05)',
+                border:'1px solid rgba(217,182,90,.25)',
+                color:'var(--cream)',
+                fontSize:24,
+                fontFamily:'var(--fs-body)',
+                outline:'none',
+                textAlign:'center',
+                letterSpacing:'0.4em',
+                boxSizing:'border-box',
+              }}
+              autoFocus
+              onKeyDown={e => { if (e.key === 'Enter') signInWithPin() }}
+            />
 
             <button
               className="btn"
               onClick={signInWithPin}
-              disabled={loading || !pinValid || !firstName.trim() || !lastName.trim()}
+              disabled={loading || pin.length < 1}
               style={{width:'100%',fontSize:15,padding:'16px 30px',display:'flex',alignItems:'center',justifyContent:'center',gap:12}}
             >
               {loading ? (
@@ -305,7 +267,7 @@ function LoginContent() {
             </button>
 
             <button
-              onClick={() => { setPinMode(false); setPin(''); setPinValid(false); setFirstName(''); setLastName(''); setError('') }}
+              onClick={() => { setPinMode(false); setPin(''); setError('') }}
               style={{
                 background:'none',
                 border:'none',

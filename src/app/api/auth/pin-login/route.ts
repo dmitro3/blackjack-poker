@@ -1,78 +1,49 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-server'
-
-const VALID_PIN = '1111'
-
-function makeCode(): string {
-  const a = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-  let s = ''
-  for (let i = 0; i < 6; i++) s += a[Math.floor(Math.random() * a.length)]
-  return s
-}
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json().catch(() => ({}))
-    const { pin, firstName, lastName } = body
+    const { pin } = await req.json().catch(() => ({}))
 
-    if (pin !== VALID_PIN) {
-      return NextResponse.json({ error: 'Invalid PIN' }, { status: 401 })
-    }
-
-    if (!firstName?.trim() || !lastName?.trim()) {
-      return NextResponse.json({ error: 'Name required' }, { status: 400 })
-    }
-
-    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      console.error('[pin-login] SUPABASE_SERVICE_ROLE_KEY is not set')
-      return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 })
+    if (!pin || typeof pin !== 'string') {
+      return NextResponse.json({ error: 'PIN required' }, { status: 400 })
     }
 
     const admin = createAdminClient()
-    const id = crypto.randomUUID()
-    const password = crypto.randomUUID()
-    const email = `guest_${id}@housetables.guest`
-    const displayName = `${firstName.trim()} ${lastName.trim()}`
 
-    const { data: authData, error: authError } = await admin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: { full_name: displayName },
+    // Look up PIN in guest_pins table
+    const { data: guest, error: lookupError } = await admin
+      .from('guest_pins')
+      .select('email, password')
+      .eq('pin', pin.trim())
+      .single()
+
+    if (lookupError || !guest) {
+      return NextResponse.json({ error: 'Invalid PIN' }, { status: 401 })
+    }
+
+    // Sign in as this guest using stored credentials
+    const supabase = createSupabaseClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { auth: { persistSession: false } }
+    )
+
+    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+      email: guest.email,
+      password: guest.password,
     })
 
-    if (authError || !authData?.user) {
-      console.error('[pin-login] createUser error:', authError)
-      return NextResponse.json({ error: authError?.message || 'Failed to create account' }, { status: 500 })
+    if (signInError || !signInData.session) {
+      console.error('[pin-login] signIn error:', signInError)
+      return NextResponse.json({ error: 'Sign-in failed' }, { status: 500 })
     }
 
-    const userId = authData.user.id
-
-    // Generate unique invite code
-    let inviteCode = makeCode()
-    let unique = false
-    while (!unique) {
-      const { data: existing } = await admin.from('profiles').select('id').eq('invite_code', inviteCode).single()
-      if (!existing) unique = true
-      else inviteCode = makeCode()
-    }
-
-    const { error: profileError } = await admin.from('profiles').insert({
-      id: userId,
-      email,
-      display_name: displayName,
-      chips: 100000,
-      is_admin: false,
-      invite_code: inviteCode,
-      last_login: new Date().toISOString(),
+    return NextResponse.json({
+      access_token: signInData.session.access_token,
+      refresh_token: signInData.session.refresh_token,
     })
-
-    if (profileError) {
-      console.error('[pin-login] profile insert error:', profileError)
-      // Still return credentials — user can play, profile may partially exist
-    }
-
-    return NextResponse.json({ email, password })
   } catch (err) {
     console.error('[pin-login] unexpected error:', err)
     return NextResponse.json({ error: 'Server error' }, { status: 500 })

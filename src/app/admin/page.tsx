@@ -56,6 +56,13 @@ interface AdminSportsEvent {
 
 interface PlayerGameStat { game: string; count: number; wagered: number; won: number }
 
+interface GuestAccount {
+  pin: string
+  display_name: string
+  user_id: string
+  created_at: string
+}
+
 interface SportsBet {
   user_id: string
   event_id: string
@@ -110,12 +117,14 @@ function PlayerDetailPanel({
   rooms,
   onClose,
   onBan,
+  pin,
 }: {
   player: Profile
   playerGames: PlayerGameStat[]
   rooms: GameRoom[]
   onClose: () => void
   onBan: (id: string, banned: boolean) => void
+  pin?: string
 }) {
   const status = getOnlineStatus(player.last_login)
   const netPnl = (player.total_won || 0) - (player.total_wagered || 0)
@@ -147,7 +156,14 @@ function PlayerDetailPanel({
             <div style={{ fontFamily: 'var(--fs-display)', fontWeight: 900, fontSize: 22, color: 'var(--cream)', marginBottom: 4 }}>
               {player.display_name || 'Unknown'}
             </div>
-            <div style={{ fontSize: 13, color: 'var(--cream-faint)', marginBottom: 8 }}>{player.email}</div>
+            {pin ? (
+              <div style={{ fontSize: 13, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ color: 'var(--cream-faint)' }}>PIN:</span>
+                <code style={{ fontFamily: 'monospace', letterSpacing: '0.2em', color: 'var(--gold-l)', fontWeight: 700 }}>{pin}</code>
+              </div>
+            ) : (
+              <div style={{ fontSize: 13, color: 'var(--cream-faint)', marginBottom: 8 }}>{player.email}</div>
+            )}
             {player.email === DIRECTOR_EMAIL && (
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 8, padding: '3px 10px', borderRadius: 999, background: 'linear-gradient(135deg, rgba(217,182,90,.18), rgba(155,120,40,.12))', border: '1px solid rgba(217,182,90,.45)' }}>
                 <span style={{ fontSize: 10 }}>♦</span>
@@ -328,6 +344,10 @@ export default function AdminPage() {
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null)
   const [countdown, setCountdown] = useState(30)
   const [selectedPlayer, setSelectedPlayer] = useState<Profile | null>(null)
+  const [guests, setGuests] = useState<GuestAccount[]>([])
+  const [newGuestName, setNewGuestName] = useState('')
+  const [newGuestPin, setNewGuestPin] = useState('')
+  const [creatingGuest, setCreatingGuest] = useState(false)
   const router = useRouter()
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -400,6 +420,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     load()
+    fetch('/api/admin/guests').then(r => r.ok ? r.json() : null).then(d => { if (d) setGuests(d.guests || []) })
     intervalRef.current = setInterval(() => load(true), 30000)
     countdownRef.current = setInterval(() => setCountdown(c => c <= 1 ? 30 : c - 1), 1000)
     return () => {
@@ -407,6 +428,42 @@ export default function AdminPage() {
       clearInterval(countdownRef.current!)
     }
   }, [load])
+
+  async function handleCreateGuest() {
+    if (!newGuestName.trim() || !newGuestPin.trim()) { showToast('Name and PIN required', ''); return }
+    setCreatingGuest(true)
+    const res = await fetch('/api/admin/guests', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ display_name: newGuestName, pin: newGuestPin }),
+    })
+    const data = await res.json()
+    if (res.ok) {
+      setGuests(g => [data.guest, ...g])
+      setNewGuestName('')
+      setNewGuestPin('')
+      showToast(`Guest "${data.guest.display_name}" created with PIN ${data.guest.pin}`, 'win')
+      load(true)
+    } else {
+      showToast(data.error || 'Failed to create guest', 'lose')
+    }
+    setCreatingGuest(false)
+  }
+
+  async function handleDeleteGuest(pin: string, name: string) {
+    if (!confirm(`Remove guest account for ${name}? This cannot be undone.`)) return
+    const res = await fetch('/api/admin/guests', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin }),
+    })
+    if (res.ok) {
+      setGuests(g => g.filter(x => x.pin !== pin))
+      showToast(`${name} removed`, '')
+    } else {
+      showToast('Failed to remove guest', 'lose')
+    }
+  }
 
   async function handleSportsAction(eventId: string, action: string, resultOptionId?: string) {
     const res = await fetch('/api/admin/sports', {
@@ -522,6 +579,8 @@ export default function AdminPage() {
     }
   }
 
+  const pinByUserId = Object.fromEntries(guests.map(g => [g.user_id, g.pin]))
+
   const totalWagered = players.reduce((s, p) => s + (p.total_wagered || 0), 0)
   const totalWon = players.reduce((s, p) => s + (p.total_won || 0), 0)
   const houseProfit = totalWagered - totalWon
@@ -567,6 +626,7 @@ export default function AdminPage() {
           rooms={rooms}
           onClose={() => setSelectedPlayer(null)}
           onBan={handleBan}
+          pin={pinByUserId[selectedPlayer.id]}
         />
       )}
 
@@ -678,7 +738,14 @@ export default function AdminPage() {
                               {p.display_name || 'Unknown'}
                               {p.email === DIRECTOR_EMAIL && <span style={{ fontSize: 9, letterSpacing: '.14em', color: 'var(--gold)', fontFamily: 'var(--fs-head)', textTransform: 'uppercase', fontWeight: 700, padding: '1px 6px', border: '1px solid rgba(217,182,90,.4)', borderRadius: 999 }}>Director</span>}
                             </div>
-                            <div style={{ fontSize: 12, color: 'var(--cream-faint)', marginTop: 2 }}>{p.email}</div>
+                            {pinByUserId[p.id] ? (
+                              <div style={{ fontSize: 12, marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ color: 'var(--cream-faint)' }}>PIN:</span>
+                                <code style={{ fontFamily: 'monospace', letterSpacing: '0.2em', color: 'var(--gold-l)', fontWeight: 700, fontSize: 13 }}>{pinByUserId[p.id]}</code>
+                              </div>
+                            ) : (
+                              <div style={{ fontSize: 12, color: 'var(--cream-faint)', marginTop: 2 }}>{p.email}</div>
+                            )}
                             {p.is_admin && <span style={{ fontSize: 10, letterSpacing: '.1em', color: 'var(--gold)', fontFamily: 'var(--fs-head)', textTransform: 'uppercase' }}>Admin</span>}
                           </button>
                         </td>
@@ -1279,6 +1346,72 @@ export default function AdminPage() {
                   {refillEnabled ? 'Enabled — players can top up' : 'Disabled — top-up button hidden'}
                 </span>
               </div>
+            </div>
+
+            {/* Guest account creation */}
+            <div style={{ marginTop: 32, paddingTop: 28, borderTop: '1px solid rgba(217,182,90,.12)' }}>
+              <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>Create Guest Account</div>
+              <div style={{ color: 'var(--cream-faint)', fontSize: 13, lineHeight: 1.5, marginBottom: 16 }}>
+                Guest accounts sign in with a PIN instead of Google. The player&apos;s name and PIN are visible in the player list.
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <input
+                  type="text"
+                  placeholder="Display name"
+                  value={newGuestName}
+                  onChange={e => setNewGuestName(e.target.value)}
+                  style={{
+                    padding: '11px 14px', borderRadius: 8,
+                    background: 'rgba(255,255,255,.05)', border: '1px solid rgba(217,182,90,.25)',
+                    color: 'var(--cream)', fontSize: 14, fontFamily: 'var(--fs-body)', outline: 'none',
+                  }}
+                />
+                <input
+                  type="text"
+                  placeholder="PIN (e.g. 2847)"
+                  value={newGuestPin}
+                  onChange={e => setNewGuestPin(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleCreateGuest() }}
+                  style={{
+                    padding: '11px 14px', borderRadius: 8,
+                    background: 'rgba(255,255,255,.05)', border: '1px solid rgba(217,182,90,.25)',
+                    color: 'var(--cream)', fontSize: 14, fontFamily: 'var(--fs-body)', outline: 'none',
+                    letterSpacing: '0.2em',
+                  }}
+                />
+                <button
+                  className="btn btn-sm"
+                  onClick={handleCreateGuest}
+                  disabled={creatingGuest || !newGuestName.trim() || !newGuestPin.trim()}
+                >
+                  {creatingGuest ? 'Creating…' : '+ Create Guest Account'}
+                </button>
+              </div>
+
+              {guests.length > 0 && (
+                <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ fontSize: 11, letterSpacing: '.15em', color: 'var(--cream-faint)', fontFamily: 'var(--fs-head)', textTransform: 'uppercase', marginBottom: 4 }}>Active Guest Accounts</div>
+                  {guests.map(g => (
+                    <div key={g.pin} style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '10px 14px', borderRadius: 8,
+                      background: 'rgba(0,0,0,.3)', border: '1px solid rgba(217,182,90,.1)',
+                    }}>
+                      <div>
+                        <span style={{ fontWeight: 700, color: 'var(--cream)', marginRight: 12 }}>{g.display_name}</span>
+                        <code style={{ fontFamily: 'monospace', letterSpacing: '0.2em', color: 'var(--gold-l)', fontWeight: 700, fontSize: 14 }}>{g.pin}</code>
+                      </div>
+                      <button
+                        className="btn btn-sm btn-danger"
+                        style={{ fontSize: 11, padding: '4px 10px' }}
+                        onClick={() => handleDeleteGuest(g.pin, g.display_name)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
