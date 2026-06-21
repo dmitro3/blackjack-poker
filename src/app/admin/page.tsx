@@ -71,6 +71,7 @@ interface SportsBet {
   won: boolean | null
   settled: boolean
   option_id: string
+  option_label: string
   display_name: string
   event_title: string
   sport: string
@@ -1250,7 +1251,6 @@ export default function AdminPage() {
             </>}
 
             {sportsSubTab === 'bettors' && <>
-            {/* Bettor breakdown */}
             <div style={panelStyle}>
               <h3 style={{ fontFamily: 'var(--fs-head)', fontWeight: 700, fontSize: 16, margin: '0 0 16px', letterSpacing: '.04em' }}>
                 <span className="gold-text">Player Bets</span>
@@ -1260,51 +1260,43 @@ export default function AdminPage() {
               </h3>
               {sportsBets.length === 0 ? (
                 <div style={{ color: 'var(--cream-faint)', fontSize: 13, padding: '20px 0' }}>No bets placed yet.</div>
-              ) : (() => {
-                // Aggregate by player
-                const byPlayer: Record<string, { display_name: string; total: number; sports: Record<string, number> }> = {}
-                for (const b of sportsBets) {
-                  if (!byPlayer[b.user_id]) byPlayer[b.user_id] = { display_name: b.display_name, total: 0, sports: {} }
-                  byPlayer[b.user_id].total += b.chips_wagered
-                  const key = b.sport.toUpperCase()
-                  byPlayer[b.user_id].sports[key] = (byPlayer[b.user_id].sports[key] || 0) + b.chips_wagered
-                }
-                const rows = Object.values(byPlayer).sort((a, b) => b.total - a.total)
-                return (
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid rgba(217,182,90,.2)' }}>
-                        {['Player', 'Sport Breakdown', 'Total Wagered'].map(h => (
-                          <th key={h} style={{ padding: '8px 12px', textAlign: h === 'Total Wagered' ? 'right' : 'left', fontFamily: 'var(--fs-head)', fontSize: 11, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--cream-faint)', fontWeight: 600 }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map((row, i) => (
-                        <tr key={i} style={{ borderBottom: '1px solid rgba(217,182,90,.07)' }}>
-                          <td style={{ padding: '12px', fontWeight: 600, color: 'var(--cream)', fontSize: 14 }}>{row.display_name}</td>
-                          <td style={{ padding: '12px' }}>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                              {Object.entries(row.sports).sort((a, b) => b[1] - a[1]).map(([sport, amt]) => (
-                                <span key={sport} style={{
-                                  fontSize: 11, padding: '2px 8px', borderRadius: 999,
-                                  background: 'rgba(217,182,90,.1)', border: '1px solid rgba(217,182,90,.2)',
-                                  color: 'var(--cream-dim)', fontFamily: 'var(--fs-head)', letterSpacing: '.06em',
-                                }}>
-                                  {sport} · {fmt(amt)}
-                                </span>
-                              ))}
-                            </div>
-                          </td>
-                          <td style={{ padding: '12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--gold-l)', fontWeight: 700, fontSize: 14 }}>
-                            {fmt(row.total)}
-                          </td>
-                        </tr>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid rgba(217,182,90,.2)' }}>
+                      {['Player', 'Event', 'Pick', 'Wagered', 'Result'].map(h => (
+                        <th key={h} style={{ padding: '8px 12px', textAlign: h === 'Wagered' ? 'right' : 'left', fontFamily: 'var(--fs-head)', fontSize: 11, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--cream-faint)', fontWeight: 600 }}>{h}</th>
                       ))}
-                    </tbody>
-                  </table>
-                )
-              })()}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sportsBets.map((b, i) => (
+                      <tr key={i} style={{ borderBottom: '1px solid rgba(217,182,90,.07)' }}>
+                        <td style={{ padding: '12px', fontWeight: 600, color: 'var(--cream)', fontSize: 13, whiteSpace: 'nowrap' }}>{b.display_name}</td>
+                        <td style={{ padding: '12px', fontSize: 12, color: 'var(--cream-dim)', maxWidth: 280 }}>
+                          <div style={{ fontWeight: 600, color: 'var(--cream)', marginBottom: 2 }}>{b.event_title}</div>
+                          <span style={{ fontSize: 10, letterSpacing: '.1em', textTransform: 'uppercase', fontFamily: 'var(--fs-head)', color: 'var(--gold)', opacity: .7 }}>{b.sport}</span>
+                        </td>
+                        <td style={{ padding: '12px', fontSize: 12, color: 'var(--cream-dim)' }}>
+                          {b.option_label || b.option_id}
+                        </td>
+                        <td style={{ padding: '12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--cream-dim)', fontSize: 13, whiteSpace: 'nowrap' }}>
+                          {fmt(b.chips_wagered)}
+                        </td>
+                        <td style={{ padding: '12px', whiteSpace: 'nowrap' }}>
+                          {!b.settled ? (
+                            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'rgba(217,182,90,.1)', border: '1px solid rgba(217,182,90,.25)', color: 'var(--gold-l)', fontFamily: 'var(--fs-head)', letterSpacing: '.06em' }}>Pending</span>
+                          ) : b.won ? (
+                            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'rgba(95,217,154,.1)', border: '1px solid rgba(95,217,154,.3)', color: '#5fd99a', fontFamily: 'var(--fs-head)', letterSpacing: '.06em' }}>Won +{fmt(b.chips_won - b.chips_wagered)}</span>
+                          ) : (
+                            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'rgba(231,112,138,.08)', border: '1px solid rgba(231,112,138,.25)', color: '#e7708a', fontFamily: 'var(--fs-head)', letterSpacing: '.06em' }}>Lost</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
             </>}
           </div>

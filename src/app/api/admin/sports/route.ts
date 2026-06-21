@@ -19,7 +19,7 @@ export async function GET() {
   const [eventsRes, betsRes] = await Promise.all([
     admin.from('sports_events').select('*').order('created_at', { ascending: false }),
     admin.from('sports_bets')
-      .select('user_id, event_id, chips_wagered, chips_won, won, settled, option_id')
+      .select('user_id, event_id, chips_wagered, chips_won, won, settled, option_id, option_label')
       .order('created_at', { ascending: false }),
   ])
 
