@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Suspense } from 'react'
+import { signInWithPin } from './actions'
 
 function LoginContent() {
   const [loading, setLoading] = useState(false)
@@ -38,38 +39,27 @@ function LoginContent() {
     }
   }
 
-  async function signInWithPin() {
+  async function handlePinSubmit() {
     if (pin.length < 1) return
     setLoading(true)
     setError('')
     try {
-      const res = await fetch('/api/pin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin }),
-      })
-      let data: { access_token?: string; refresh_token?: string; error?: string } = {}
-      const rawText = await res.text()
-      try { data = JSON.parse(rawText) } catch { /* non-JSON */ }
-
-      if (!res.ok) {
-        setError(data.error || `Error ${res.status}`)
+      const result = await signInWithPin(pin)
+      if (result.error) {
+        setError(result.error)
         setLoading(false)
         return
       }
-
       const supabase = createClient()
       const { error: sessionError } = await supabase.auth.setSession({
-        access_token: data.access_token!,
-        refresh_token: data.refresh_token!,
+        access_token: result.access_token!,
+        refresh_token: result.refresh_token!,
       })
-
       if (sessionError) {
         setError('Sign-in failed. Please try again.')
         setLoading(false)
         return
       }
-
       router.push('/')
     } catch {
       setError('Something went wrong. Please try again.')
@@ -249,12 +239,12 @@ function LoginContent() {
                 boxSizing:'border-box',
               }}
               autoFocus
-              onKeyDown={e => { if (e.key === 'Enter') signInWithPin() }}
+              onKeyDown={e => { if (e.key === 'Enter') handlePinSubmit() }}
             />
 
             <button
               className="btn"
-              onClick={signInWithPin}
+              onClick={handlePinSubmit}
               disabled={loading || pin.length < 1}
               style={{width:'100%',fontSize:15,padding:'16px 30px',display:'flex',alignItems:'center',justifyContent:'center',gap:12}}
             >
