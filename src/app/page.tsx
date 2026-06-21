@@ -7,6 +7,8 @@ import Link from 'next/link'
 import { Suspense } from 'react'
 import { setMuted, isMuted, startLobbyMusic, stopLobbyMusic } from '@/lib/casino-sounds'
 import { decodeCode } from '@/lib/invite-codes'
+import { useBeta } from '@/components/BetaProvider'
+import VibrantLobby from '@/components/VibrantLobby'
 
 interface Profile {
   id: string
@@ -66,6 +68,7 @@ function LobbyContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const supabase = createClient()
+  const { canSee } = useBeta()
 
   const showToast = useCallback((msg: string, kind = '') => {
     setToast({ msg, kind })
@@ -358,8 +361,20 @@ function LobbyContent() {
           </div>
         </section>
 
-        {/* Game cards */}
-        <section className="lobby-grid" style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:24,marginTop:46}}>
+        {/* Game cards — vibrant redesign (beta) */}
+        {canSee('vibrant-lobby') && (
+          <div style={{ marginTop: 46 }}>
+            <VibrantLobby
+              chips={profile?.chips || 0}
+              refillEnabled={refillEnabled}
+              refillAmount={refillAmount}
+              onRefill={handleRefill}
+            />
+          </div>
+        )}
+
+        {/* Game cards — classic layout */}
+        {!canSee('vibrant-lobby') && <section className="lobby-grid" style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:24,marginTop:46}}>
           {/* Blackjack */}
           <Link href="/blackjack" style={{
             gridColumn:'span 2',position:'relative',borderRadius:'var(--radius-lg)',overflow:'hidden',cursor:'pointer',
@@ -627,7 +642,7 @@ function LobbyContent() {
               </div>
             </div>
           </Link>
-        </section>
+        </section>}
 
         {/* Stack panel — centered */}
         <section style={{display:'flex',justifyContent:'center',marginTop:34}}>
