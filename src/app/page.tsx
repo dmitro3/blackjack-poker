@@ -60,6 +60,7 @@ function LobbyContent() {
   const [showJoin, setShowJoin] = useState(false)
   const [joinCode, setJoinCode] = useState('')
   const [joinErr, setJoinErr] = useState('')
+  const [showAccount, setShowAccount] = useState(false)
   const searchParams = useSearchParams()
   const router = useRouter()
   const supabase = createClient()
@@ -165,6 +166,97 @@ function LobbyContent() {
     <div style={{position:'relative',minHeight:'100vh'}}>
       {toast && <Toast msg={toast.msg} kind={toast.kind} onDone={() => setToast(null)} />}
 
+      {/* Account panel */}
+      {showAccount && profile && (
+        <div style={{position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'flex-start',justifyContent:'flex-end'}}>
+          <div style={{position:'absolute',inset:0,background:'rgba(0,0,0,.6)',backdropFilter:'blur(4px)'}} onClick={() => setShowAccount(false)} />
+          <div style={{
+            position:'relative',width:380,height:'100vh',overflowY:'auto',
+            background:'linear-gradient(180deg,#1a1510 0%,#0b0a07 100%)',
+            borderLeft:'1px solid rgba(217,182,90,.25)',
+            boxShadow:'-24px 0 80px rgba(0,0,0,.7)',
+            padding:28,display:'flex',flexDirection:'column',gap:22,
+            animation:'slideInRight .25s cubic-bezier(.2,.8,.2,1)',
+          }}>
+            {/* Header */}
+            <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between'}}>
+              <div>
+                <div style={{fontFamily:'var(--fs-display)',fontWeight:900,fontSize:22,color:'var(--cream)',marginBottom:4}}>
+                  {profile.display_name || 'Player'}
+                </div>
+                {profile.email?.startsWith('guest.') && profile.email?.endsWith('@housetables.com') ? (
+                  <div style={{display:'inline-flex',alignItems:'center',gap:6,padding:'3px 10px',borderRadius:999,background:'rgba(217,182,90,.1)',border:'1px solid rgba(217,182,90,.3)',fontSize:12,color:'var(--gold-l)',fontFamily:'var(--fs-head)',letterSpacing:'.08em'}}>
+                    Guest Account
+                  </div>
+                ) : (
+                  <div style={{fontSize:13,color:'var(--cream-faint)'}}>{profile.email}</div>
+                )}
+              </div>
+              <button onClick={() => setShowAccount(false)} style={{
+                background:'rgba(255,255,255,.05)',border:'1px solid rgba(217,182,90,.2)',borderRadius:8,
+                color:'var(--cream-faint)',cursor:'pointer',fontSize:18,width:36,height:36,
+                display:'flex',alignItems:'center',justifyContent:'center',
+              }}>×</button>
+            </div>
+
+            <div style={{height:1,background:'rgba(217,182,90,.15)'}} />
+
+            {/* Chip balance */}
+            <div style={{background:'rgba(217,182,90,.06)',border:'1px solid rgba(217,182,90,.2)',borderRadius:12,padding:'18px 20px',textAlign:'center'}}>
+              <div style={{fontSize:11,letterSpacing:'.2em',color:'var(--cream-faint)',textTransform:'uppercase',fontFamily:'var(--fs-head)',marginBottom:6}}>Current Balance</div>
+              <div style={{fontFamily:'var(--fs-display)',fontWeight:900,fontSize:38,color:'var(--gold-l)'}}>
+                {fmt(profile.chips || 0)}
+              </div>
+              <div style={{fontSize:12,color:'var(--cream-faint)',marginTop:4,fontFamily:'var(--fs-head)',letterSpacing:'.1em'}}>chips</div>
+            </div>
+
+            {/* Stats grid */}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
+              {[
+                {label:'Wagered',value:fmt(profile.total_wagered||0),color:'var(--cream-dim)'},
+                {label:'Won',value:fmt(profile.total_won||0),color:'#5fd99a'},
+                {label:'Net P&L',value:(((profile.total_won||0)-(profile.total_wagered||0))>=0?'+':'')+fmt((profile.total_won||0)-(profile.total_wagered||0)),color:(profile.total_won||0)-(profile.total_wagered||0)>=0?'#5fd99a':'#e7708a'},
+              ].map(s => (
+                <div key={s.label} style={{background:'rgba(0,0,0,.4)',border:'1px solid rgba(217,182,90,.1)',borderRadius:10,padding:'12px 10px',textAlign:'center'}}>
+                  <div style={{fontSize:9,letterSpacing:'.18em',color:'var(--cream-faint)',textTransform:'uppercase',fontFamily:'var(--fs-head)',marginBottom:5}}>{s.label}</div>
+                  <div style={{fontWeight:700,fontSize:15,color:s.color,fontVariantNumeric:'tabular-nums'}}>{s.value}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Invite link */}
+            {!(profile.email?.startsWith('guest.') && profile.email?.endsWith('@housetables.com')) && (
+              <div>
+                <div style={{fontSize:11,letterSpacing:'.18em',color:'var(--cream-faint)',textTransform:'uppercase',fontFamily:'var(--fs-head)',marginBottom:10}}>Your Invite Link</div>
+                <div style={{display:'flex',gap:8}}>
+                  <input
+                    readOnly
+                    value={inviteUrl}
+                    style={{flex:1,background:'rgba(0,0,0,.4)',border:'1px solid rgba(217,182,90,.2)',borderRadius:8,padding:'0 12px',color:'var(--cream-faint)',fontSize:11,height:38,fontFamily:'var(--fs-head)',outline:'none',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}
+                  />
+                  <button
+                    className="btn btn-sm"
+                    onClick={handleCopyInvite}
+                    style={{flexShrink:0,fontSize:12,padding:'0 14px'}}
+                  >{copied ? '✓ Copied' : 'Copy'}</button>
+                </div>
+                <div style={{marginTop:8,fontSize:12,color:'var(--cream-faint)',lineHeight:1.5}}>
+                  Friends who join via your link get 5,000 bonus chips.
+                </div>
+              </div>
+            )}
+
+            <div style={{marginTop:'auto',paddingTop:8}}>
+              <button
+                className="btn btn-sm btn-ghost"
+                onClick={handleSignOut}
+                style={{width:'100%',fontSize:13,padding:'12px 0'}}
+              >Sign Out</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Ambient chips */}
       <div style={{position:'fixed',inset:0,pointerEvents:'none',zIndex:0,overflow:'hidden'}}>
         {['#d9b65a','#b3122a','#137a4a','#d9b65a','#b3122a','#137a4a','#d9b65a','#b3122a'].map((color, i) => (
@@ -216,7 +308,20 @@ function LobbyContent() {
           {refillEnabled && (
             <button className="btn btn-sm btn-ghost" onClick={handleRefill}>Refill</button>
           )}
-          <button className="btn btn-sm btn-ghost" onClick={handleSignOut} style={{fontSize:11}}>Sign Out</button>
+          <button
+            onClick={() => setShowAccount(true)}
+            title="My Account"
+            style={{
+              width:36,height:36,borderRadius:'50%',
+              background:'var(--gold-grad)',
+              display:'flex',alignItems:'center',justifyContent:'center',
+              color:'#2a1f08',fontFamily:'var(--fs-display)',fontWeight:900,fontSize:15,
+              boxShadow:'inset 0 1px 0 rgba(255,255,255,.6),inset 0 -2px 4px var(--gold-deep),0 2px 8px rgba(0,0,0,.4)',
+              border:'none',cursor:'pointer',flexShrink:0,
+            }}
+          >
+            {(profile?.display_name || '?')[0].toUpperCase()}
+          </button>
         </div>
       </header>
 
