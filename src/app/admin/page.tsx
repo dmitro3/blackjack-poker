@@ -458,7 +458,9 @@ export default function AdminPage() {
       body: JSON.stringify({ pin }),
     })
     if (res.ok) {
+      const deletedGuest = guests.find(g => g.pin === pin)
       setGuests(g => g.filter(x => x.pin !== pin))
+      if (deletedGuest) setPlayers(ps => ps.filter(p => p.id !== deletedGuest.user_id))
       showToast(`${name} removed`, '')
     } else {
       showToast('Failed to remove guest', 'lose')
