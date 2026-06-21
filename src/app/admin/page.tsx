@@ -158,13 +158,12 @@ function PlayerDetailPanel({
             <div style={{ fontFamily: 'var(--fs-display)', fontWeight: 900, fontSize: 22, color: 'var(--cream)', marginBottom: 4 }}>
               {player.display_name || 'Unknown'}
             </div>
-            {pin ? (
+            <div style={{ fontSize: 13, color: 'var(--cream-faint)', marginBottom: 4 }}>{player.email}</div>
+            {pin && (
               <div style={{ fontSize: 13, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{ color: 'var(--cream-faint)' }}>PIN:</span>
                 <code style={{ fontFamily: 'monospace', letterSpacing: '0.2em', color: 'var(--gold-l)', fontWeight: 700 }}>{pin}</code>
               </div>
-            ) : (
-              <div style={{ fontSize: 13, color: 'var(--cream-faint)', marginBottom: 8 }}>{player.email}</div>
             )}
             {player.email === DIRECTOR_EMAIL && (
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 8, padding: '3px 10px', borderRadius: 999, background: 'linear-gradient(135deg, rgba(217,182,90,.18), rgba(155,120,40,.12))', border: '1px solid rgba(217,182,90,.45)' }}>
@@ -756,14 +755,16 @@ export default function AdminPage() {
                               {p.display_name || 'Unknown'}
                               {p.email === DIRECTOR_EMAIL && <span style={{ fontSize: 9, letterSpacing: '.14em', color: 'var(--gold)', fontFamily: 'var(--fs-head)', textTransform: 'uppercase', fontWeight: 700, padding: '1px 6px', border: '1px solid rgba(217,182,90,.4)', borderRadius: 999 }}>Director</span>}
                             </div>
-                            {(pinByUserId[p.id] || p.pin) ? (
-                              <div style={{ fontSize: 12, marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <span style={{ color: 'var(--cream-faint)' }}>PIN:</span>
-                                <code style={{ fontFamily: 'monospace', letterSpacing: '0.2em', color: 'var(--gold-l)', fontWeight: 700, fontSize: 13 }}>{pinByUserId[p.id] || p.pin}</code>
-                              </div>
-                            ) : (
-                              <div style={{ fontSize: 12, color: 'var(--cream-faint)', marginTop: 2 }}>{p.email}</div>
-                            )}
+                            <div style={{ fontSize: 12, color: 'var(--cream-faint)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <span>{p.email}</span>
+                              {(pinByUserId[p.id] || p.pin) && (
+                                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  <span style={{ opacity: .4 }}>·</span>
+                                  <span style={{ color: 'var(--cream-faint)' }}>PIN</span>
+                                  <code style={{ fontFamily: 'monospace', letterSpacing: '0.15em', color: 'var(--gold-l)', fontWeight: 700 }}>{pinByUserId[p.id] || p.pin}</code>
+                                </span>
+                              )}
+                            </div>
                             {p.is_admin && <span style={{ fontSize: 10, letterSpacing: '.1em', color: 'var(--gold)', fontFamily: 'var(--fs-head)', textTransform: 'uppercase' }}>Admin</span>}
                           </button>
                         </td>
