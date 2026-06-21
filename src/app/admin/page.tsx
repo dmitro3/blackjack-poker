@@ -29,6 +29,7 @@ interface Profile {
   is_banned: boolean
   last_login: string
   created_at: string
+  pin?: string
 }
 
 interface Session {
@@ -349,6 +350,7 @@ export default function AdminPage() {
   const [newGuestName, setNewGuestName] = useState('')
   const [newGuestPin, setNewGuestPin] = useState('')
   const [creatingGuest, setCreatingGuest] = useState(false)
+  const [generatingPins, setGeneratingPins] = useState(false)
   const router = useRouter()
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -449,6 +451,19 @@ export default function AdminPage() {
       showToast(data.error || 'Failed to create guest', 'lose')
     }
     setCreatingGuest(false)
+  }
+
+  async function handleGeneratePins() {
+    setGeneratingPins(true)
+    const res = await fetch('/api/admin/generate-pins', { method: 'POST' })
+    const data = await res.json()
+    if (res.ok) {
+      showToast(`Generated ${data.generated} PINs, filled ${data.guestsFilled} guest PINs`, 'win')
+      load(true)
+    } else {
+      showToast(data.error || 'Failed', 'lose')
+    }
+    setGeneratingPins(false)
   }
 
   async function handleDeleteGuest(pin: string, name: string) {
@@ -1341,6 +1356,21 @@ export default function AdminPage() {
                     {refillEnabled ? 'Enabled — players can top up' : 'Disabled — top-up button hidden'}
                   </span>
                 </div>
+              </div>
+
+              <div style={{ marginTop: 28, paddingTop: 24, borderTop: '1px solid rgba(217,182,90,.12)' }}>
+                <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>Player PINs</div>
+                <div style={{ color: 'var(--cream-faint)', fontSize: 13, lineHeight: 1.5, marginBottom: 14 }}>
+                  Generate 4-digit PINs for all existing players who don&apos;t have one yet. New players get one automatically on first sign-in.
+                </div>
+                <button
+                  className="btn btn-sm"
+                  onClick={handleGeneratePins}
+                  disabled={generatingPins}
+                  style={{ opacity: generatingPins ? .6 : 1 }}
+                >
+                  {generatingPins ? 'Generating…' : 'Generate Missing PINs'}
+                </button>
               </div>
             </div>
 

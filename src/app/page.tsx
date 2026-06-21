@@ -16,6 +16,7 @@ interface Profile {
   total_wagered: number
   total_won: number
   invite_code: string
+  pin?: string
 }
 
 const DIRECTOR_EMAIL = 'vedantbhatia8@gmail.com'
@@ -209,6 +210,17 @@ function LobbyContent() {
               </div>
               <div style={{fontSize:12,color:'var(--cream-faint)',marginTop:4,fontFamily:'var(--fs-head)',letterSpacing:'.1em'}}>chips</div>
             </div>
+
+            {/* PIN */}
+            {profile.pin && (
+              <div style={{background:'rgba(0,0,0,.35)',border:'1px solid rgba(217,182,90,.18)',borderRadius:12,padding:'14px 18px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                <div>
+                  <div style={{fontSize:10,letterSpacing:'.2em',color:'var(--cream-faint)',textTransform:'uppercase',fontFamily:'var(--fs-head)',marginBottom:5}}>Your Login PIN</div>
+                  <code style={{fontFamily:'monospace',fontSize:28,fontWeight:900,letterSpacing:'0.3em',color:'var(--gold-l)'}}>{profile.pin}</code>
+                </div>
+                <div style={{fontSize:11,color:'var(--cream-faint)',textAlign:'right',lineHeight:1.5,maxWidth:110}}>Use this to sign in without Google</div>
+              </div>
+            )}
 
             {/* Stats grid */}
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>

@@ -82,6 +82,7 @@ export async function POST(req: Request) {
     chips: startingChips,
     is_admin: false,
     invite_code: inviteCode,
+    pin: pin.trim(),
     last_login: new Date().toISOString(),
   })
 
