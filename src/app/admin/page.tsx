@@ -362,9 +362,6 @@ export default function AdminPage() {
   const [creatingGuest, setCreatingGuest] = useState(false)
   const [generatingPins, setGeneratingPins] = useState(false)
   const [featureFlags, setFeatureFlags] = useState<FeatureFlag[]>([])
-  const [newFlagKey, setNewFlagKey] = useState('')
-  const [newFlagName, setNewFlagName] = useState('')
-  const [addingFlag, setAddingFlag] = useState(false)
   const router = useRouter()
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -649,26 +646,6 @@ export default function AdminPage() {
     } else {
       showToast('Failed', 'lose')
     }
-  }
-
-  async function handleAddFlag() {
-    if (!newFlagKey.trim() || !newFlagName.trim()) { showToast('Key and name required', ''); return }
-    setAddingFlag(true)
-    const res = await fetch('/api/admin/feature-flags', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: newFlagKey.trim(), display_name: newFlagName.trim() }),
-    })
-    if (res.ok) {
-      const d = await res.json()
-      setFeatureFlags(fs => [...fs, d.flag])
-      setNewFlagKey('')
-      setNewFlagName('')
-      showToast('Flag created', 'win')
-    } else {
-      showToast('Failed', 'lose')
-    }
-    setAddingFlag(false)
   }
 
   async function handleDeleteFlag(key: string) {
@@ -1586,30 +1563,11 @@ export default function AdminPage() {
                 <span className="gold-text">Feature Flags</span>
               </h2>
               <p style={{ color: 'var(--cream-faint)', fontSize: 13, margin: '0 0 20px', lineHeight: 1.6 }}>
-                Toggle flags between <strong style={{ color: '#c4b5fd' }}>Beta</strong> (only beta-access users see) and <strong style={{ color: '#5fd99a' }}>Public</strong> (everyone sees).
+                Toggle flags between <strong style={{ color: '#c4b5fd' }}>Beta</strong> (only beta-access users see) and <strong style={{ color: '#5fd99a' }}>Public</strong> (everyone sees). Flags are created automatically when new beta features ship.
               </p>
 
-              {/* Add new flag */}
-              <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-                <input
-                  placeholder="flag-key"
-                  value={newFlagKey}
-                  onChange={e => setNewFlagKey(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
-                  style={{ flex: '0 0 160px', padding: '9px 12px', borderRadius: 8, background: 'rgba(255,255,255,.05)', border: '1px solid rgba(217,182,90,.25)', color: 'var(--cream)', fontSize: 13, fontFamily: 'monospace', outline: 'none' }}
-                />
-                <input
-                  placeholder="Display name"
-                  value={newFlagName}
-                  onChange={e => setNewFlagName(e.target.value)}
-                  style={{ flex: 1, minWidth: 140, padding: '9px 12px', borderRadius: 8, background: 'rgba(255,255,255,.05)', border: '1px solid rgba(217,182,90,.25)', color: 'var(--cream)', fontSize: 13, outline: 'none' }}
-                />
-                <button className="btn btn-sm" onClick={handleAddFlag} disabled={addingFlag || !newFlagKey.trim() || !newFlagName.trim()}>
-                  {addingFlag ? 'Adding…' : '+ Add Flag'}
-                </button>
-              </div>
-
               {featureFlags.length === 0 ? (
-                <div style={{ color: 'var(--cream-faint)', fontSize: 13, padding: '16px 0', fontFamily: 'var(--fs-head)', letterSpacing: '.06em' }}>No flags yet — add one above.</div>
+                <div style={{ color: 'var(--cream-faint)', fontSize: 13, padding: '16px 0', fontFamily: 'var(--fs-head)', letterSpacing: '.06em' }}>No beta features yet.</div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {featureFlags.map(f => (
