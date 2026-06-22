@@ -25,6 +25,7 @@ export async function GET() {
   const { data, error } = await admin
     .from('guest_pins')
     .select('pin, display_name, created_at, user_id')
+    .neq('pin', '2')
     .order('created_at', { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
