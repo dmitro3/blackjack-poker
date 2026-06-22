@@ -68,7 +68,7 @@ function LobbyContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const supabase = createClient()
-  const { canSee } = useBeta()
+  const { canSee, isLoaded } = useBeta()
 
   const showToast = useCallback((msg: string, kind = '') => {
     setToast({ msg, kind })
@@ -361,8 +361,8 @@ function LobbyContent() {
           </div>
         </section>
 
-        {/* Game cards — vibrant redesign (beta, hidden by default until flag released) */}
-        {canSee('vibrant-lobby', { defaultVisible: false }) && (
+        {/* Game cards — vibrant redesign (beta only, never shows until isLoaded) */}
+        {isLoaded && canSee('vibrant-lobby', { defaultVisible: false }) && (
           <div style={{ marginTop: 46 }}>
             <VibrantLobby
               chips={profile?.chips || 0}
@@ -373,8 +373,8 @@ function LobbyContent() {
           </div>
         )}
 
-        {/* Game cards — classic layout */}
-        {!canSee('vibrant-lobby', { defaultVisible: false }) && <section className="lobby-grid" style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:24,marginTop:46}}>
+        {/* Game cards — classic layout (shown during load and for non-beta users) */}
+        {!(isLoaded && canSee('vibrant-lobby', { defaultVisible: false })) && <section className="lobby-grid" style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:24,marginTop:46}}>
           {/* Blackjack */}
           <Link href="/blackjack" style={{
             gridColumn:'span 2',position:'relative',borderRadius:'var(--radius-lg)',overflow:'hidden',cursor:'pointer',
