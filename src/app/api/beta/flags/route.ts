@@ -31,5 +31,7 @@ export async function GET() {
     }
   } catch {}
 
-  return NextResponse.json({ flags, featureMap, hasBetaAccess })
+  return NextResponse.json({ flags, featureMap, hasBetaAccess }, {
+    headers: { 'Cache-Control': 'no-store' },
+  })
 }
