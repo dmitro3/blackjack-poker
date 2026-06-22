@@ -10,21 +10,28 @@ interface FeatureFlag {
   status: 'beta' | 'public'
 }
 
-const REDESIGNS = [
+const CSS_REDESIGNS = [
   { key: 'ui_v2', version: '2', label: 'Eclipse', description: 'Deep violet & indigo theme' },
   { key: 'ui_v3', version: '3', label: 'Jade', description: 'Rich emerald & teal theme' },
 ]
+
+const LOBBY_REDESIGNS: Record<string, { label: string; description: string }> = {
+  'vibrant-lobby': { label: 'Vibrant Lobby', description: 'Full lobby redesign — hero cards, quick play grid, sports banner' },
+}
 
 export default function BetaPage() {
   const [flags, setFlags] = useState<FeatureFlag[]>([])
   const [hasBetaAccess, setHasBetaAccess] = useState(false)
   const [loading, setLoading] = useState(true)
   const [activeVersion, setActiveVersion] = useState<string | null>(null)
+  const [activeLobby, setActiveLobby] = useState<string | null>(null)
   const router = useRouter()
 
   useEffect(() => {
-    const match = document.cookie.match(/ui_version=(\d)/)
-    if (match) setActiveVersion(match[1])
+    const vMatch = document.cookie.match(/ui_version=(\d)/)
+    if (vMatch) setActiveVersion(vMatch[1])
+    const lMatch = document.cookie.match(/beta_ui=([^;]+)/)
+    if (lMatch) setActiveLobby(decodeURIComponent(lMatch[1]))
   }, [])
 
   useEffect(() => {
@@ -49,13 +56,24 @@ export default function BetaPage() {
     window.location.reload()
   }
 
+  function toggleLobbyDesign(key: string) {
+    if (activeLobby === key) {
+      document.cookie = 'beta_ui=; path=/; max-age=0'
+      setActiveLobby(null)
+    } else {
+      document.cookie = `beta_ui=${encodeURIComponent(key)}; path=/; max-age=${60 * 60 * 24 * 365}`
+      setActiveLobby(key)
+    }
+  }
+
   if (loading) return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ color: 'var(--gold-l)', fontFamily: 'var(--fs-head)', letterSpacing: '.1em' }}>Loading…</div>
     </div>
   )
 
-  const betaFeatures = flags.filter(f => !f.key.startsWith('ui_v'))
+  const lobbyRedesignFlags = flags.filter(f => f.key in LOBBY_REDESIGNS)
+  const betaFeatures = flags.filter(f => !f.key.startsWith('ui_v') && !(f.key in LOBBY_REDESIGNS))
 
   return (
     <div style={{ minHeight: '100vh', padding: '40px 28px 80px', maxWidth: 780, margin: '0 auto' }}>
@@ -77,13 +95,47 @@ export default function BetaPage() {
         </p>
       </div>
 
-      {/* UI Redesigns */}
+      {/* Lobby redesigns (cookie: beta_ui) */}
+      {lobbyRedesignFlags.length > 0 && (
+        <div style={{ marginBottom: 40 }}>
+          <div style={{ fontFamily: 'var(--fs-head)', fontSize: 11, letterSpacing: '.2em', color: 'var(--cream-faint)', textTransform: 'uppercase', marginBottom: 16 }}>
+            Lobby Redesigns
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {lobbyRedesignFlags.map(f => {
+              const meta = LOBBY_REDESIGNS[f.key]
+              const isActive = activeLobby === f.key
+              return (
+                <div key={f.key} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '16px 20px', borderRadius: 12,
+                  background: isActive ? 'rgba(217,182,90,.08)' : 'rgba(0,0,0,.3)',
+                  border: isActive ? '1px solid rgba(217,182,90,.35)' : '1px solid rgba(217,182,90,.12)',
+                }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--cream)', marginBottom: 2 }}>{meta.label}</div>
+                    <div style={{ fontSize: 13, color: 'var(--cream-faint)' }}>{meta.description}</div>
+                  </div>
+                  {isActive ? (
+                    <button className="btn btn-sm btn-ghost" onClick={() => toggleLobbyDesign(f.key)} style={{ fontSize: 12 }}>
+                      Active — turn off
+                    </button>
+                  ) : (
+                    <button className="btn btn-sm" onClick={() => toggleLobbyDesign(f.key)} style={{ fontSize: 12 }}>Enable</button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* UI Themes (cookie: ui_version — CSS class swap) */}
       <div style={{ marginBottom: 40 }}>
         <div style={{ fontFamily: 'var(--fs-head)', fontSize: 11, letterSpacing: '.2em', color: 'var(--cream-faint)', textTransform: 'uppercase', marginBottom: 16 }}>
-          UI Themes
+          Colour Themes
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {/* Default theme */}
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             padding: '16px 20px', borderRadius: 12,
@@ -101,7 +153,7 @@ export default function BetaPage() {
             )}
           </div>
 
-          {REDESIGNS.map(r => {
+          {CSS_REDESIGNS.map(r => {
             const isActive = activeVersion === r.version
             return (
               <div key={r.key} style={{
@@ -147,7 +199,7 @@ export default function BetaPage() {
         </div>
       )}
 
-      {betaFeatures.length === 0 && flags.length === 0 && (
+      {flags.length === 0 && (
         <div style={{ color: 'var(--cream-faint)', fontSize: 14, fontFamily: 'var(--fs-head)', letterSpacing: '.06em' }}>
           No beta features active right now — check back soon.
         </div>

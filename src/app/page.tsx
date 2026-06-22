@@ -68,7 +68,8 @@ function LobbyContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const supabase = createClient()
-  const { canSee, isLoaded } = useBeta()
+  const { isLoaded, hasBetaAccess } = useBeta()
+  const [betaUiDesign, setBetaUiDesign] = useState<string | null>(null)
 
   const showToast = useCallback((msg: string, kind = '') => {
     setToast({ msg, kind })
@@ -76,6 +77,11 @@ function LobbyContent() {
 
   useEffect(() => {
     try { setMutedUI(localStorage.getItem('casinoMuted') === '1') } catch {}
+  }, [])
+
+  useEffect(() => {
+    const match = document.cookie.match(/beta_ui=([^;]+)/)
+    setBetaUiDesign(match ? decodeURIComponent(match[1]) : null)
   }, [])
 
   // Start lobby music on first user interaction (browser autoplay policy)
@@ -312,6 +318,9 @@ function LobbyContent() {
           </div>
         </Link>
         <div className="lobby-header-right" style={{display:'flex',alignItems:'center',gap:14}}>
+          {isLoaded && hasBetaAccess && (
+            <Link href="/beta" className="btn btn-sm btn-ghost" style={{fontSize:12,letterSpacing:'.06em'}}>⚗ Beta</Link>
+          )}
           <button className="btn btn-sm" onClick={() => { setJoinCode(''); setJoinErr(''); setShowJoin(true) }}>Join Game</button>
           <button
             className="btn btn-sm btn-ghost"
@@ -361,8 +370,8 @@ function LobbyContent() {
           </div>
         </section>
 
-        {/* Game cards — vibrant redesign (beta only, never shows until isLoaded) */}
-        {isLoaded && canSee('vibrant-lobby', { defaultVisible: false }) && (
+        {/* Game cards — vibrant redesign: only for beta users who explicitly enabled it via /beta */}
+        {isLoaded && hasBetaAccess && betaUiDesign === 'vibrant-lobby' && (
           <div style={{ marginTop: 46 }}>
             <VibrantLobby
               chips={profile?.chips || 0}
@@ -373,8 +382,8 @@ function LobbyContent() {
           </div>
         )}
 
-        {/* Game cards — classic layout (shown during load and for non-beta users) */}
-        {!(isLoaded && canSee('vibrant-lobby', { defaultVisible: false })) && <section className="lobby-grid" style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:24,marginTop:46}}>
+        {/* Game cards — classic layout (default for everyone, including beta users who haven't opted in) */}
+        {!(isLoaded && hasBetaAccess && betaUiDesign === 'vibrant-lobby') && <section className="lobby-grid" style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:24,marginTop:46}}>
           {/* Blackjack */}
           <Link href="/blackjack" style={{
             gridColumn:'span 2',position:'relative',borderRadius:'var(--radius-lg)',overflow:'hidden',cursor:'pointer',
