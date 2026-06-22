@@ -10,11 +10,9 @@ export async function GET() {
 
   const admin = createAdminClient()
 
-  // Get profile — beta_access column may not exist yet, handle gracefully
   const profileRes = await admin.from('profiles').select('is_admin, email').eq('id', user.id).single()
   const isAdmin = profileRes.data?.is_admin || user.email === ADMIN_EMAIL
 
-  // Try to get beta_access separately in case the column exists
   let betaAccess = false
   try {
     const { data } = await admin.from('profiles').select('beta_access').eq('id', user.id).single()
@@ -23,14 +21,13 @@ export async function GET() {
 
   const hasBetaAccess = isAdmin || betaAccess
 
-  // Get feature flags — table may not exist yet
-  let flags: { key: string; display_name: string; status: string }[] = []
+  let flags: { key: string; name: string; display_name: string; status: string }[] = []
   const featureMap: Record<string, 'beta' | 'public'> = {}
   try {
-    const { data } = await admin.from('feature_flags').select('key, display_name, status').order('created_at')
+    const { data } = await admin.from('feature_flags').select('key, name, status').order('created_at')
     if (data) {
-      flags = data
-      for (const f of data) featureMap[f.key] = f.status as 'beta' | 'public'
+      flags = data.map((f: Record<string, unknown>) => ({ ...f, display_name: f.name } as { key: string; name: string; display_name: string; status: string }))
+      for (const f of data) featureMap[f.key as string] = f.status as 'beta' | 'public'
     }
   } catch {}
 

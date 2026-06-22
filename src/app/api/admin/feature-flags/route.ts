@@ -15,21 +15,9 @@ export async function GET() {
   if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { data, error } = await admin.from('feature_flags').select('*').order('created_at')
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ flags: data || [] })
-}
-
-export async function POST(req: Request) {
-  const admin = await requireAdmin()
-  if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const { key, display_name, status = 'beta' } = await req.json().catch(() => ({}))
-  if (!key?.trim() || !display_name?.trim()) {
-    return NextResponse.json({ error: 'key and display_name required' }, { status: 400 })
-  }
-  const { data, error } = await admin.from('feature_flags')
-    .upsert({ key: key.trim(), display_name: display_name.trim(), status, updated_at: new Date().toISOString() })
-    .select().single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ flag: data })
+  // Normalize: support both `name` and `display_name` column
+  const flags = (data || []).map((f: Record<string, unknown>) => ({ ...f, display_name: f.display_name ?? f.name }))
+  return NextResponse.json({ flags })
 }
 
 export async function PATCH(req: Request) {

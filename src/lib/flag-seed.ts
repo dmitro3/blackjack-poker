@@ -1,7 +1,7 @@
 import { createAdminClient } from './supabase-server'
 
 const SEED_FLAGS = [
-  { key: 'vibrant-lobby', display_name: 'Vibrant Lobby Redesign', status: 'beta' },
+  { key: 'vibrant-lobby', name: 'Vibrant Lobby Redesign', status: 'beta' },
 ]
 
 export async function seedFlags() {
