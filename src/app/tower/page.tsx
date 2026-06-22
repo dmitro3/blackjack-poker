@@ -108,6 +108,8 @@ function TileCard({ state, onClick, floorIdx }: {
 
 export default function TowerPage() {
   const [bal, setBal] = useState(100000)
+  const [refillEnabled, setRefillEnabled] = useState(false)
+  const [refillAmount, setRefillAmount] = useState(100000)
   const [bet, setBet] = useState(5000)
   const [phase, setPhase] = useState<Phase>('idle')
   const [floor, setFloor] = useState(0)
@@ -129,6 +131,12 @@ export default function TowerPage() {
       if (!user) { router.push('/login'); return }
       const { data: p } = await supabase.from('profiles').select('chips').eq('id', user.id).single()
       if (p) setBal(p.chips)
+      const [refillEnabledRes, refillAmountRes] = await Promise.all([
+        supabase.from('admin_settings').select('value').eq('key', 'refill_enabled').single(),
+        supabase.from('admin_settings').select('value').eq('key', 'refill_amount').single(),
+      ])
+      setRefillEnabled(refillEnabledRes.data?.value === 'true')
+      setRefillAmount(parseInt(refillAmountRes.data?.value || '100000', 10))
       setLoading(false)
     }
     init()
@@ -245,6 +253,13 @@ export default function TowerPage() {
         </div>
         <div className="right">
           <button className="btn btn-sm btn-ghost" onClick={() => setShowHelp(true)}>How to Play</button>
+          {refillEnabled && phase === 'idle' && (
+            <button className="btn btn-sm btn-ghost" onClick={async () => {
+              if (bal >= refillAmount) return
+              const res = await fetch('/api/game/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ game: 'refill', chips_wagered: 0, chips_won: refillAmount }) })
+              if (res.ok) { const d = await res.json(); setBal(d.chips) }
+            }}>Refill</button>
+          )}
           <div className="balance">
             <div className="coin">H</div>
             <span className="amt tabnum">{fmt(bal)}</span>

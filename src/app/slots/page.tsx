@@ -88,6 +88,8 @@ function Toast({ msg, kind, onDone }: { msg: string; kind: string; onDone: () =>
 
 export default function SlotsPage() {
   const [bal, setBal] = useState(100000)
+  const [refillEnabled, setRefillEnabled] = useState(false)
+  const [refillAmount, setRefillAmount] = useState(100000)
   const [bet, setBet] = useState(1000)
   const [syms, setSyms] = useState<string[]>(['🍒', '🍒', '🍋'])
   const [spinning, setSpinning] = useState(false)
@@ -114,6 +116,12 @@ export default function SlotsPage() {
       if (!user) { router.push('/login'); return }
       const { data: profile } = await supabase.from('profiles').select('chips').eq('id', user.id).single()
       if (profile) setBal(profile.chips)
+      const [refillEnabledRes, refillAmountRes] = await Promise.all([
+        supabase.from('admin_settings').select('value').eq('key', 'refill_enabled').single(),
+        supabase.from('admin_settings').select('value').eq('key', 'refill_amount').single(),
+      ])
+      setRefillEnabled(refillEnabledRes.data?.value === 'true')
+      setRefillAmount(parseInt(refillAmountRes.data?.value || '100000', 10))
       setLoading(false)
     }
     init()
@@ -187,6 +195,13 @@ export default function SlotsPage() {
         <div style={{display:'flex',alignItems:'center',gap:12}}>
           <button className="btn btn-sm btn-ghost" onClick={() => setShowHelp(true)}>How to Play</button>
           <button className="btn btn-sm btn-ghost" onClick={() => { setInviteCode(generateCode('slots')); setShowInvite(true) }}>Invite</button>
+          {refillEnabled && (
+            <button className="btn btn-sm btn-ghost" onClick={async () => {
+              if (bal >= refillAmount) { setToast({ msg: "You're already flush!", kind: '' }); return }
+              const res = await fetch('/api/game/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ game: 'refill', chips_wagered: 0, chips_won: refillAmount }) })
+              if (res.ok) { const d = await res.json(); setBal(d.chips); setToast({ msg: 'Topped up!', kind: 'win' }) }
+            }}>Refill</button>
+          )}
           <button
             className="btn btn-sm btn-ghost"
             style={{fontSize:18, padding:'8px 13px', lineHeight:1, minWidth:0}}

@@ -105,6 +105,8 @@ export default function BlackjackPage() {
   const [result, setResult] = useState<HandResult|null>(null)
   const [doubled, setDoubled] = useState(false)
   const [bal, setBal] = useState(100000)
+  const [refillEnabled, setRefillEnabled] = useState(false)
+  const [refillAmount, setRefillAmount] = useState(100000)
   const [toast, setToast] = useState<{msg:string,kind:string}|null>(null)
   const [showInvite, setShowInvite] = useState(false)
   const [showCustomChip, setShowCustomChip] = useState(false)
@@ -337,6 +339,12 @@ export default function BlackjackPage() {
         })
         channelRef.current = ch
       }
+      const [refillEnabledRes, refillAmountRes] = await Promise.all([
+        supabase.from('admin_settings').select('value').eq('key', 'refill_enabled').single(),
+        supabase.from('admin_settings').select('value').eq('key', 'refill_amount').single(),
+      ])
+      setRefillEnabled(refillEnabledRes.data?.value === 'true')
+      setRefillAmount(parseInt(refillAmountRes.data?.value || '100000', 10))
       setLoading(false)
     }
     init()
@@ -798,6 +806,13 @@ export default function BlackjackPage() {
           <button className="btn btn-sm btn-ghost" onClick={() => setShowHelp(true)}>How to Play</button>
           {!isGuest && !isSpectator && (
             <button className="btn btn-sm btn-ghost" onClick={() => setShowInvite(true)}>Invite</button>
+          )}
+          {refillEnabled && !isSpectator && (
+            <button className="btn btn-sm btn-ghost" onClick={async () => {
+              if (bal >= refillAmount) { showToast("You're already flush!"); return }
+              const res = await fetch('/api/game/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ game: 'refill', chips_wagered: 0, chips_won: refillAmount }) })
+              if (res.ok) { const d = await res.json(); setBal(d.chips); showToast('Topped up!', 'win') }
+            }}>Refill</button>
           )}
           <div className="balance">
             <div className="coin">H</div>
