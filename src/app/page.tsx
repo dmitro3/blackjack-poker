@@ -361,8 +361,8 @@ function LobbyContent() {
           </div>
         </section>
 
-        {/* Game cards — vibrant redesign (beta) */}
-        {canSee('vibrant-lobby') && (
+        {/* Game cards — vibrant redesign (beta, hidden by default until flag released) */}
+        {canSee('vibrant-lobby', { defaultVisible: false }) && (
           <div style={{ marginTop: 46 }}>
             <VibrantLobby
               chips={profile?.chips || 0}
@@ -374,7 +374,7 @@ function LobbyContent() {
         )}
 
         {/* Game cards — classic layout */}
-        {!canSee('vibrant-lobby') && <section className="lobby-grid" style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:24,marginTop:46}}>
+        {!canSee('vibrant-lobby', { defaultVisible: false }) && <section className="lobby-grid" style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:24,marginTop:46}}>
           {/* Blackjack */}
           <Link href="/blackjack" style={{
             gridColumn:'span 2',position:'relative',borderRadius:'var(--radius-lg)',overflow:'hidden',cursor:'pointer',

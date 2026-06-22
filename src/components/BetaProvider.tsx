@@ -6,7 +6,7 @@ interface BetaContextValue {
   featureMap: Record<string, 'beta' | 'public'>
   hasBetaAccess: boolean
   isLoaded: boolean
-  canSee: (key: string) => boolean
+  canSee: (key: string, opts?: { defaultVisible?: boolean }) => boolean
 }
 
 const BetaContext = createContext<BetaContextValue>({
@@ -38,9 +38,11 @@ export default function BetaProvider({ children }: { children: React.ReactNode }
       .catch(() => setIsLoaded(true))
   }, [])
 
-  function canSee(key: string): boolean {
+  function canSee(key: string, opts?: { defaultVisible?: boolean }): boolean {
+    const defaultVisible = opts?.defaultVisible ?? true
     const status = featureMap[key]
-    if (!status || status === 'public') return true
+    if (status === undefined) return defaultVisible
+    if (status === 'public') return true
     return hasBetaAccess
   }
 
